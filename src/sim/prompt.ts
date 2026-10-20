@@ -8,7 +8,7 @@ import { aiLangNote } from '../core/i18n.js';
 import { setPrompt, nameOf } from '../st/bridge.js';
 import { weekday, hm, period, seasonOf } from './time.js';
 import { placeOf } from './places.js';
-import { presentAt } from './people.js';
+import { presentAt, routineStep } from './people.js';
 import { feelings } from './needs.js';
 import { planLines } from './plans.js';
 import { memoryLines } from './facts.js';
@@ -28,7 +28,7 @@ export const PROMPT_KEY = 'mundi_scene';
 // (1 first); blocks without `cut` are always sent (where and when we are, who is here, safety lines).
 export interface Block { id: string; name: string; desc: string; cut?: number }
 export const BLOCKS: Block[] = [
-    { id: 'core', name: 'Scene basics', desc: 'World, day and time, weather, place, who is here, and the rules of the scene.' },
+    { id: 'core', name: 'Scene basics', desc: 'World, day and time, weather, place, who is here and why, and the rules of the scene.' },
     { id: 'memories', name: 'Memories', desc: 'What the people here remember about you, and what happened earlier in this place.', cut: 9 },
     { id: 'plans', name: 'Plans', desc: 'Plans you made with the people here.', cut: 8 },
     { id: 'focus', name: 'Scene focus', desc: 'Why you are here: a date, a meet-up, someone who came along.', cut: 8 },
@@ -58,13 +58,13 @@ export function sceneBlocks(): Built[] {
     const here = placeOf(g, w, g.player.loc);
     const present = presentAt(g, w, g.player.loc);
     const met = present.filter(r => r.met);
-    const names = present.map(r => r.name);
+    const now = nowAbs(g);
     const raw: Record<string, string[]> = {
         core: [
             `[World state — ${w.name}]`,
             `Now: ${weekday(g.day)}, day ${g.day}, ${hm(g.minutes)} (${period(w, g.minutes).name.toLowerCase()}). Weather: ${weatherOf(g).name.toLowerCase()}. Season: ${seasonOf(g).name.toLowerCase()}.`,
             `Place: ${here?.name ?? 'somewhere'}${here?.desc ? ` — ${here.desc}` : ''}`,
-            names.length ? `Here with {{user}}: ${names.join(', ')}. Only they are in this scene; nobody else speaks or appears.` : 'Nobody else is here right now.',
+            present.length ? `Here with {{user}}: ${present.map(r => `${r.name} - ${hereLabel(w, r, now)}`).join(', ')}. Only they are in this scene; nobody else speaks or appears.` : 'Nobody else is here right now.',
             ...(present.some(r => !r.met) ? [`Strangers to {{user}}: ${present.filter(r => !r.met).map(r => r.name).join(', ')}. They and {{user}} have never met: they do not know each other's names until they talk and introduce themselves.`] : []),
         ],
         // only the people in this scene and this place: nobody else's memories, nobody else's whereabouts
@@ -130,6 +130,20 @@ function focusLine(g: Save, w: WorldDef, present: Resident[]): string {
     if (!present.length) return `Scene focus: {{user}} is alone here. Describe the place, the passing moment and how {{user}} feels; nobody else appears.`;
     void w;
     return '';
+}
+
+// Why each person here is around, from their own routine: student, work, home or free time.
+function hereLabel(w: WorldDef, r: Resident, now: number): string {
+    const target = routineStep(r, now)[1];
+    if (target === 'campus') return 'attending classes';
+    if (target === 'work') {
+        const job = w.features?.jobs !== false ? w.occupations.find(o => o.id === r.occupation) : null;
+        if (!job) return 'Leisure';   // no job: the routine sends her to free time instead
+        return job.name ? `Working as ${job.name}` : 'Working';
+    }
+    if (target === 'leisure') return 'Leisure';
+    if (target === 'home') return 'Home';
+    return w.places.find(p => p.id === target)?.name || 'Home';   // a set stop of the routine; unknown place: she stays home
 }
 
 function soloLine(g: Save, present: Resident[]) {
