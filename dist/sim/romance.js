@@ -14,6 +14,15 @@ export function romOf(g, avatar) {
 }
 export const romValue = (g, avatar) => romOf(g, avatar).value;
 export function addRomance(g, avatar, delta) { const r = romOf(g, avatar); r.value = Math.max(0, Math.min(100, r.value + delta)); }
+// set by hand (the world config): the value and/or the status, keeping the partner list in step
+export function setRomance(g, avatar, value, status) {
+    const r = romOf(g, avatar);
+    if (value !== undefined)
+        r.value = Math.max(0, Math.min(100, value));
+    if (status !== undefined)
+        r.status = status;
+    syncPartner(g, avatar);
+}
 // keeps the older "partner" list (used by plans, the phone…) in step with the romance status
 function syncPartner(g, avatar) {
     const p = social(g).partner;
@@ -36,7 +45,7 @@ export const ROMANCE_TIERS = [
     { id: 'interest', name: 'Interest', lo: 15, hi: 40, color: '#f48fb1' },
     { id: 'crush', name: 'Crush', lo: 40, hi: 101, color: '#e7489a' },
 ];
-const STATUS_TIER = {
+export const STATUS_TIER = {
     dating: { id: 'dating', name: 'Dating', lo: 0, hi: 101, color: '#e23b6e' },
     engaged: { id: 'engaged', name: 'Engaged', lo: 0, hi: 101, color: '#c2185b' },
     married: { id: 'married', name: 'Married', lo: 0, hi: 101, color: '#ad1457' },
