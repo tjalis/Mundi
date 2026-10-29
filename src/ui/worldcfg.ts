@@ -9,7 +9,7 @@ import { dressHtml } from './dressui.js';
 import { homeJobOf, SHIFTS, DAYS } from '../sim/hometime.js';
 import { homeSettingsHtml } from './homeui.js';
 import { ctx, thumb, characters, charOf, personaThumb, personaName, lorebooks, chatLore, bindChatLore, createLorebook } from '../st/bridge.js';
-import { homeAddress, placeOf } from '../sim/places.js';
+import { homeAddress, placeOf, pins, floorName } from '../sim/places.js';
 import { resident, homeSpot, takenHomes, syncScene, currentEntry, applyTie } from '../sim/game.js';
 import { social, bondLabel, isPartner } from '../sim/social.js';
 import { romOf } from '../sim/romance.js';
@@ -176,7 +176,7 @@ function tabRules(g: Save, w: WorldDef): string {
         `<label class="mu-field slider"><span>${label} · ${v}${unit}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-input="wc-cfg" data-k="${esc(key)}"></label>`;
     const live = (c.clock ?? 'action') === 'live';
     return `<section class="mu-wc-sec"><h4>${esc(w.name)}</h4><p>${esc(w.description)}</p><p class="mu-muted">Game mode: <b>${GAME_MODES.find(m => m.id === gameMode(w))!.name}</b> (change it in the world creator).</p></section>
-        ${isScenario(w) ? `<section class="mu-wc-sec">${homeSettingsHtml(g)}</section>${dressHtml(g, w)}${systemOn(w, 'romance') ? `<section class="mu-wc-sec"><h4>Love</h4><label class="mu-check"><input type="checkbox" data-input="wc-poly" ${c.poly ? 'checked' : ''}><span>Open relationships</span></label></section>` : ''}<section class="mu-wc-sec"><h4>Rooms</h4>${list(w.places.map(p => p.name))}</section>` : `
+        ${isScenario(w) ? `<section class="mu-wc-sec">${homeSettingsHtml(g)}</section>${dressHtml(g, w)}${systemOn(w, 'romance') ? `<section class="mu-wc-sec"><h4>Love</h4><label class="mu-check"><input type="checkbox" data-input="wc-poly" ${c.poly ? 'checked' : ''}><span>Open relationships</span></label></section>` : ''}<section class="mu-wc-sec"><h4>Rooms</h4>${list(pins(g, w).filter(p => !p.link && !p.home).map(p => floorName(p)))}</section>` : `
         <section class="mu-wc-sec"><h4>Time</h4>
             <div class="mu-heropick is-start">
                 <button class="mu-herocard ${live ? '' : 'is-on'}" data-act="wc-clock" data-v="action"><b>Only with actions</b><p>The clock moves only when you do something: eat, drink, sleep, work, travel, or let time pass. Talking does not spend time.</p></button>
@@ -186,7 +186,7 @@ function tabRules(g: Save, w: WorldDef): string {
         ${systemOn(w, 'romance') ? `<section class="mu-wc-sec"><h4>Love</h4><label class="mu-check"><input type="checkbox" data-input="wc-poly" ${c.poly ? 'checked' : ''}><span>Open relationships (polyamory)<small>No jealousy: you can date several people at once, freely, and everyone knows. Off: a new romance hurts the partners you already have.</small></span></label></section>` : ''}
         ${lifeSection(g, w)}
         <section class="mu-wc-sec"><h4>Needs</h4>${list(activeStatuses(w).map(s => `${s.icon} ${s.name}`))}</section>
-        <section class="mu-wc-sec"><h4>Places</h4>${list(w.places.map(p => p.name))}</section>
+        <section class="mu-wc-sec"><h4>Places</h4>${list(pins(g, w).filter(p => !p.link && !p.home).map(p => floorName(p)))}</section>
         <section class="mu-wc-sec"><h4>Jobs</h4><ul class="mu-lib-jobs">${w.occupations.map(o => `<li><b>${esc(o.name)}</b> <small>${o.ranks.map(r => esc(r.name)).join(' → ')}</small></li>`).join('')}</ul></section>
         ${WC.adv ? `<section class="mu-wc-sec"><h4>Advanced settings</h4>
             ${slider('Travel time', 'travel', c.travel ?? 1, 0.25, 3, 0.25, '×')}
