@@ -15,7 +15,7 @@ import type { ShopItem, Breakable } from '../core/presets.js';
 import { book } from './ledger.js';
 import { social, bondOf, isPartner, type PlanKind } from './social.js';
 import { note } from './facts.js';
-import { placeOf, playerHomeId } from './places.js';
+import { placeOf, playerHomeId, lockedNow, floorName } from './places.js';
 import { whereNow, residents } from './people.js';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -168,6 +168,8 @@ export function afterAction(g: Save, w: WorldDef, a: ActionDef, success: boolean
 /* ---------- who lets you in ---------- */
 
 export function doorAnswer(g: Save, w: WorldDef, loc: string): { ok: boolean; text: string } {
+    // a restricted place (or a floor of one) turns you away until the story, its rules or you open it
+    { const p = !loc.startsWith('home:') ? placeOf(g, w, loc) : null; const why = p && loc !== g.player.loc ? lockedNow(g, w, p) : ''; if (why) return { ok: false, text: `${floorName(p!)}: ${why}.` }; }
     if (!loc.startsWith('home:') || loc === playerHomeId) return { ok: true, text: '' };
     const r = g.cast[loc.slice(5)];
     if (!r) return { ok: true, text: '' };

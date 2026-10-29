@@ -2,6 +2,7 @@
 // with SillyTavern's normal generation (and with any preset). The world's lore lives in its lorebook instead.
 import { homeJobsLine } from './hometime.js';
 import { dressLine } from './dress.js';
+import { lookLine } from './looks.js';
 import { approvalLine, couplesLine, rumorLines, activeWorldLore } from './living.js';
 import './longlife.js';   // people's lives over the weeks (runs by itself, day by day)
 import { feelingLine, physiqueLine, aspirationOf } from './life.js';
@@ -10,7 +11,7 @@ import { getWorld, homeNeedsOn } from '../core/world.js';
 import { aiLangNote } from '../core/i18n.js';
 import { setPrompt, nameOf } from '../st/bridge.js';
 import { weekday, hm, period, seasonOf } from './time.js';
-import { placeOf } from './places.js';
+import { placeOf, floorName } from './places.js';
 import { presentAt, whereNow, OUT } from './people.js';
 import { partyLine as houseLine } from './houseparty.js';
 import { feelings } from './needs.js';
@@ -44,6 +45,8 @@ import { holdingsLine } from './holdings.js';
 import { afflictionLine } from './afflictions.js';
 import { artifactLines } from './artifacts.js';
 import { towerLines } from './towers.js';
+import { buildingLines, lockedHereLine } from './discovery.js';
+import { gateLines } from './gates.js';
 import { contractLines } from './contracts.js';
 import { prisonLine } from './prison.js';
 import { institutionLines } from './institutions.js';
@@ -128,9 +131,10 @@ export function sceneBlocks(): Built[] {
             `[World state — ${w.name}]`,
             ...scenarioLines(g, w),
             `Now: ${weekday(g.day)}, day ${g.day}, ${hm(g.minutes)} (${period(w, g.minutes).name.toLowerCase()}). Weather: ${weatherHere(g, w).name.toLowerCase()}. Season: ${seasonOf(g).name.toLowerCase()}.`,
-            `Place: ${here?.name ?? 'somewhere'}${here?.desc ? ` — ${here.desc}` : ''}${here && !here.home && systemOn(w, 'living') && !openNow(g, w, here.id) ? ' (closed at this hour: the doors are shut; only staff, if anyone, is around)' : ''}`,
+            `Place: ${here ? floorName(here) : 'somewhere'}${here?.in && placeOf(g, w, here.in) ? ` (in ${placeOf(g, w, here.in)!.name})` : ''}${here?.desc ? ` — ${here.desc}` : ''}${here && !here.home && systemOn(w, 'living') && !openNow(g, w, here.id) ? ' (closed at this hour: the doors are shut; only staff, if anyone, is around)' : ''}`,
             names.length ? `Here with {{user}}: ${names.join(', ')}. Only they are in this scene; nobody else speaks or appears.` : 'Nobody else is here right now.',
             ...(guestLine(g, present) ? [guestLine(g, present)] : []),
+            lookLine(g, w, present),
             ...(present.some(r => !r.met) ? [`Strangers to {{user}}: ${present.filter(r => !r.met).map(r => r.name).join(', ')}. They and {{user}} have never met: they do not know each other's names until they talk and introduce themselves.`] : []),
         ],
         // only the people in this scene and this place: nobody else's memories, nobody else's whereabouts
@@ -138,7 +142,7 @@ export function sceneBlocks(): Built[] {
         diary: diaryLines(g),
         memories: [...memoryLines(g, w, met, personaName()), ...placeMemoryLines(g, w, present)],
         plans: planLines(g, present, w),
-        focus: [eventLine(g, w), combatLine(g, w), prisonLine(g, w), ...towerLines(g, w), ...contractLines(g, w), ...institutionLines(g, w), focusLine(g, w, present), ...whyHereLines(g, w, present), ...questLines(g)],
+        focus: [eventLine(g, w), combatLine(g, w), prisonLine(g, w), ...towerLines(g, w), ...gateLines(g, w), ...buildingLines(g, w), lockedHereLine(g, w), ...contractLines(g, w), ...institutionLines(g, w), focusLine(g, w, present), ...whyHereLines(g, w, present), ...questLines(g)],
         feelings: [feelingLine(g, met)],
         you: [(g.player as any).bio ? `About {{user}} in this world: ${(g.player as any).bio}` : '', sheetLine(g, w), afflictionLine(g, w), ...artifactLines(g, w), partyLine(g, w), standingLine(g, w), bountyLine(g, w), tradeLine(g, w), holdingsLine(g, w), habitLine(g, w), hobbyLine(g, w), petLine(g, w), mentorLine(g, w, present.map(r => r.avatar)), physiqueLine(g), aspirationOf(g) && systemOn(w, 'goals') ? `{{user}}'s life goal: ${aspirationOf(g)!.name.toLowerCase()}.` : ''],
         solo: [soloLine(g, present)],

@@ -12,8 +12,11 @@ import { NATIVE, nativeHost } from './native.js';
 import { feedPrefs } from '../sim/feed.js';
 import { setSkin } from './skins.js';
 import { addonsTab } from './addons.js';
+import { spritesSettingsHtml } from './spritegen.js';
+import { peopleSettingsHtml } from './storypeople.js';
 import { lookPanelHtml, lookConfirmHtml } from './chatlook.js';
 import { DATE_FORMATS, fmtDate, fmtDateTime, fmtClock } from '../core/fmt.js';
+import { aiTestHtml } from './aitest.js';
 
 // Fonts: Mundi's default, the system's, or one of these (the world's style font is used when "world" is chosen).
 export const FONTS: [string, string, string][] = [['default', 'Mundi (Nunito)', ''], ['system', 'System', 'system-ui, "Segoe UI", sans-serif'], ['inter', 'Inter', '"Inter", sans-serif'],
@@ -22,7 +25,7 @@ export const FONTS: [string, string, string][] = [['default', 'Mundi (Nunito)', 
 const ACCENTS: [string, string, string][] = [['blue', 'Blue', '#1e88e5'], ['green', 'Green', '#36a81c'], ['red', 'Red', '#e23b41'], ['purple', 'Purple', '#7c4ddb'], ['pink', 'Pink', '#e7489a'], ['yellow', 'Yellow', '#f0ad13']];
 // The second color (selected chips, the line under the headers, the main menu's first button…).
 const SECONDARY: [string, string, string][] = [['green', 'Green', '#43b51b'], ['blue', 'Blue', '#1e88e5'], ['teal', 'Teal', '#16b3a5'], ['purple', 'Purple', '#7c4ddb'], ['pink', 'Pink', '#e7489a'], ['red', 'Red', '#e23b41'], ['orange', 'Orange', '#f07f13'], ['yellow', 'Yellow', '#f0ad13']];
-const TABS: [string, string][] = [['game', 'Game'], ['sound', 'Sound'], ['interface', 'Interface'], ['addons', 'Add-ons']];
+const TABS: [string, string][] = [['game', 'Game'], ['sound', 'Sound'], ['interface', 'Interface'], ['addons', 'Add-ons'], ['aitest', 'AI tests']];
 // SillyTavern's own settings panels, shown here as they are (same texts and translations as in SillyTavern).
 const ST_TABS = ['st-api', 'st-ai', 'st-format', 'st-user', 'st-ext'];
 
@@ -69,6 +72,7 @@ function tabGame() {
     return `<section><h3>General</h3>
             <label class="mu-check"><input type="checkbox" data-input="set-openstart" ${settings().openOnStart ? 'checked' : ''}><span>Open Mundi when SillyTavern starts</span></label></section>
         <section><h3>AI calls</h3><p class="mu-muted">What makes Mundi call the AI (the diary, Chirp, characters' texts, narrating what you do) is now in the game: ☰ → This world → AI context.</p></section>
+        ${peopleSettingsHtml()}
         <section><h3>Background</h3>
             <label class="mu-field"><span>When you move between places</span><select data-input="set-bgfollow">${([['mundi', 'Only Mundi\'s scene changes picture'], ['chat', 'SillyTavern\'s chat background follows the place too']] as const).map(([v, l]) => `<option value="${v}" ${((settings() as any).bgFollow ?? 'mundi') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></section>
         ${g ? `<section><h3>This save</h3>
@@ -92,7 +96,7 @@ export function settingsHtml() {
     const tab = state.settingsTab;
     if (!TABS.some(t => t[0] === tab) && !ST_TABS.includes(tab)) state.settingsTab = 'game';
     const native = ST_TABS.includes(state.settingsTab);
-    const body = native ? nativeHost(state.settingsTab) : state.settingsTab === 'sound' ? tabSound() : state.settingsTab === 'game' ? tutorialSettingsHtml() + tabGame() : state.settingsTab === 'addons' ? addonsTab() : tabInterface();
+    const body = native ? nativeHost(state.settingsTab) : state.settingsTab === 'sound' ? tabSound() : state.settingsTab === 'game' ? tutorialSettingsHtml() + tabGame() : state.settingsTab === 'addons' ? addonsTab() + spritesSettingsHtml() : state.settingsTab === 'aitest' ? aiTestHtml() : tabInterface();
     return `<div class="mu-settings">
         <div class="mu-subhead"><button data-act="settings-back" data-sfx="back">← Back</button><h2>Settings</h2></div>
         ${warningsBanner()}

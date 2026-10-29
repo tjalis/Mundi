@@ -2,6 +2,7 @@ import { relOverlays, endConfirmHtml } from './relui.js';
 // Screens for the Life-Sim systems: the elevator of apartment buildings, invitations from people, the shop and
 // goals apps, throwing a party, talking with only one person, and playing as someone else.
 import { currentHappening, answer } from '../sim/happenings.js';
+import { offerHtml } from './storypeople.js';
 import { esc, game, toast, notify, saveGame, nowAbs, state, type Save } from '../core/store.js';
 import { countUp } from '../sim/skills.js';
 import { getWorld, type WorldDef } from '../core/world.js';
@@ -85,7 +86,7 @@ function transitionHtml() {
 export function lifeOverlays() {
     const g = game(); const w = g && getWorld(g.world);
     if (!g || !w) return '';
-    return `${elevatorHtml()}${inviteHtml(g, w) || happeningHtml(g)}${playAsHtml(g)}${transitionHtml()}${relOverlays()}${endConfirmHtml()}`;
+    return `${elevatorHtml()}${inviteHtml(g, w) || happeningHtml(g) || offerHtml(g)}${playAsHtml(g)}${transitionHtml()}${relOverlays()}${endConfirmHtml()}`;
 }
 
 /* ---------- phone apps: shop and goals ---------- */

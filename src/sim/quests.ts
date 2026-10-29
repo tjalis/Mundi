@@ -27,7 +27,7 @@ export const quests = (g: Save): Quest[] => (((g as any).quests ??= []) as Quest
 export const activeQuests = (g: Save) => quests(g).filter(q => q.state === 'active');
 export const offeredQuests = (g: Save) => quests(g).filter(q => q.state === 'offered');
 
-const publicPlaces = (w: WorldDef, region?: string, tags?: string[]) => w.places.filter(p => !p.link && (!region || p.map === region) && (!tags || (p.tags ?? []).some(t => tags.includes(t))));
+const publicPlaces = (w: WorldDef, region?: string, tags?: string[]) => w.places.filter(p => !p.link && !p.hidden && !p.restricted && (!region || p.map === region) && (!tags || (p.tags ?? []).some(t => tags.includes(t))));
 const pick = <T>(g: Save, list: T[], salt: string) => list[Math.floor(rnd(g, salt) * list.length)];
 
 // What the world needs today (at most one new quest a day, three waiting at a time).
