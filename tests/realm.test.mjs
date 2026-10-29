@@ -18,7 +18,9 @@ let fails = 0, passes = 0;
 const ok = (c, m) => { if (c) passes++; else { fails++; console.log('  FAIL', m); } };
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', f), 'utf8'));
 const open = (s) => { for (const k of Object.keys(meta)) delete meta[k]; meta.mundi = s; return store.game(); };
-const fresh = (rpg, cls = 'fighter') => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = open(s); if (rpg) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
+// fed and watered: when death is real (the RPG), hunger and thirst at zero cost hit points
+const fed = (g) => { for (const id of ['hunger', 'thirst']) { const st = w.statuses.find(x => x.id === id); if (st) g.player.stats[id] = st.max; } return g; };
+const fresh = (rpg, cls = 'fighter') => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = fed(open(s)); if (rpg) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
 seed(12);
 const w = world(ext, 'medieval'); W.registerWorld(w);
 
@@ -111,7 +113,8 @@ const w = world(ext, 'medieval'); W.registerWorld(w);
     ok(RM.faithOf(gg).devotion >= 100, 'prayer and offerings fill devotion');
     ok(/ward/.test(RM.miracle(gg, holy, 'ward')) && RM.faithOf(gg).ward, 'a miracle: a ward');
     const c = C.startCombat(gg, holy, { why: 'x', foes: ['bear', 'bear', 'captain'] }); C.chooseMode(gg, holy, 'quick');
-    ok(c.over === 'fled' && (c.msgs ?? []).some(m => /ward/.test(m)) && !RM.faithOf(gg).ward, 'the ward turns a defeat aside');
+    // death is real in the RPG: the fight is lost, and the ward turns death aside
+    ok(c.over === 'lost' && !gg.mortal?.dead && !RM.faithOf(gg).ward && (gg.mortal?.told ?? []).some(t => /ward turns death aside/.test(t.text)), 'the ward turns death aside');
     delete gg.combat;
     W.registerWorld(w);
 }

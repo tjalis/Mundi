@@ -8,11 +8,11 @@ import { onDay } from './hooks.js';
 import { social, bondOf } from './social.js';
 import { note } from './facts.js';
 import { book } from './ledger.js';
-import { isRpg, sheetOf } from './rpg.js';
+import { isRpg, sheetOf, mortalOn } from './rpg.js';
 
 export type Row = 'front' | 'back';
 export interface Merc { id: string; name: string; cls: string; level: number; wage: number }
-export interface Member { avatar?: string; merc?: Merc; row: Row; cls: string; hp?: number }
+export interface Member { avatar?: string; merc?: Merc; row: Row; cls: string; hp?: number; /** their hit points at full (kept while they are wounded) */ max?: number }
 export interface Party { members: Member[] }
 export const MAX_FRIENDS = 3, MAX_MERCS = 2, JOIN_BOND = 40;
 const FOREVER = 10 ** 9;
@@ -100,7 +100,7 @@ onDay.push((g, w) => {
         if (g.player.money >= wage) { g.player.money -= wage; book(g, `${m.merc!.name}, sellsword`, -wage); }
         else { dismissMerc(g, m.merc!.id); out.push(`${m.merc!.name} the sellsword leaves: you could not pay today.`); }
     }
-    for (const m of partyOf(g).members) delete m.hp;   // a night's rest heals their wounds
+    if (!mortalOn(g, w)) for (const m of partyOf(g).members) delete m.hp;   // a night's rest heals their wounds (when death is real, only some: sim/mortal.ts)
     for (const m of friends(g)) follow(g, m.avatar!);
     return out;
 });

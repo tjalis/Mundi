@@ -13,13 +13,14 @@ import { payOf, lockedOut } from '../sim/bills.js';
 //   bottom      — the dialogue box (scene.ts); bottom right: the phone, peeking up when it is closed
 import { needWord } from '../sim/life.js';
 import { lifeOverlays, soloOf } from './lifeui.js';
-import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame } from '../core/store.js';
+import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame, hostOf } from '../core/store.js';
 import { getWorld, activeStatuses, systemOn, type StatusDef, type WorldDef, deviceLook, offScreenWork, isScenario, HOME_NEEDS, homeNeedsOn } from '../core/world.js';
 import { levelChip } from './rpgui.js';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import type { Save } from '../core/store.js';
 import { personaThumb, personaName, thumb, setPrompt } from '../st/bridge.js';
 import { personaPickHtml } from './scene.js';
+import { detachHtml } from './attach.js';
 import { outingHtml } from './outing.js';
 import { residentsHtml } from './residents.js';
 import { guestDialogsHtml } from './guestsui.js';
@@ -44,14 +45,19 @@ import { P as phone, phoneUnread } from './phone.js';
 import { PL, facePlanHtml } from './plans.js';
 import { relBar } from './relui.js';
 import { openNow } from '../sim/daynight.js';
-import { questsHere, doStep } from '../sim/quests.js';
+import { doStep } from '../sim/quests.js';
+import { questActs } from './rpgui.js';
+import { refreshPrompt } from '../sim/prompt.js';
 import { weatherHere, crowdLevel, crowdWord, regionState, regionOf, moodWord, tensionWord } from '../sim/worldstate.js';
 import { chanceOf } from '../sim/dice.js';
-import { isRpg, sheetOf, focusMax, hpMax } from '../sim/rpg.js';
+import { isRpg, sheetOf, focusMax, hpMax, mortalOn } from '../sim/rpg.js';
+import { bandOf, BAND_WORD } from '../sim/wounds.js';
 import { lifeActs, festivalChip, schoolActs } from './lifeplus.js';
 import { factionActs } from './factionsui.js';
 import { holdingsActs } from './holdingsui.js';
 import { adventureActs } from './adventureui.js';
+import { discoveryActs } from './discoveryui.js';
+import { careActs, doorActs, findActs, gearActs, roomActs, waitActs, moreHtml } from './moreacts.js';
 import { rpgOf } from '../core/rpgdef.js';
 
 /* ---------- you ---------- */
@@ -78,7 +84,7 @@ function personaCard(g: Save, w: WorldDef) {
         <button class="mh-face" data-act="pa-open" title="Play as…">${img ? `<img src="${esc(img)}" alt="">` : icon('user')}<i class="mh-face-swap">${icon('users')}</i></button>
         <div class="mh-needs">
             <div class="mh-who"><b>${esc(personaName())}</b>${levelChip()}${isScenario(w) ? '' : `<span class="mu-cash">${esc(money(w, g.player.money))}</span>`}</div>
-            ${shown.filter(isBar).map(s => `<div class="mh-bar ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(sh && (s.id === 'life' || s.id === 'health') ? `${sh.hp}/${hpMax(w, sh)} HP` : needWord(s, v(s)))}" style="--c:${esc(s.color)};--v:${v(s)}">
+            ${shown.filter(isBar).map(s => `<div class="mh-bar ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(sh && (s.id === 'life' || s.id === 'health') ? `${sh.hp}/${hpMax(w, sh)} HP${mortalOn(g, w) && bandOf(sh.hp, hpMax(w, sh)) !== 'fine' ? ` · ${BAND_WORD[bandOf(sh.hp, hpMax(w, sh))]}` : ''}${(g as any).mortal?.form ? ` · ${(g as any).mortal.form}` : ''}` : needWord(s, v(s)))}" style="--c:${esc(s.color)};--v:${v(s)}">
                 <span class="mh-bar-ic">${needIcon(s)}</span><span class="mh-bar-name">${esc(s.name)}</span><span class="mh-bar-track"><i></i></span></div>`).join('')}${focusBar}
             <div class="mh-rings">${shown.filter(s => !isBar(s)).map(s => `<div class="mh-ring ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(`${s.name}: ${needWord(s, v(s))}`)}" aria-label="${esc(s.name)}" style="--c:${esc(s.color)};--v:${v(s)}">
                 <span class="mh-ring-ic">${needIcon(s)}</span><small>${esc(s.name)}</small></div>`).join('')}</div>
@@ -144,6 +150,7 @@ function corner(g: Save, w: WorldDef) {
             ${isScenario(w) ? `<button data-act="res-open">${icon('users')}<span>Who lives here</span></button>` : ''}
             ${isScenario(w) ? `<button data-act="sc-open" data-v="persona"><span class="mh-drawer-mew"><img class="mh-drawer-me" src="${esc(personaThumb())}" alt=""></span><span>Your persona<small data-notr>${esc(personaName())}</small></span></button>` : ''}
             <button data-act="hud-look">${icon('palette')}<span>Chat look</span></button>
+            ${hostOf(g) ? `<button data-act="det-open">${icon('undo')}<span>Detach world</span></button>` : ''}
             <button data-act="open-settings">${icon('gear')}<span>Settings</span></button>
             <button data-act="to-menu" data-sfx="back">${icon('back')}<span>Main menu</span></button></nav>` : ''}
         ${lookOpen ? `<div class="mh-lookpop mh-glass" data-keep="look"><header><b>Chat look</b><button class="mu-ibtn mu-ghost" data-act="hud-look">${icon('x')}</button></header>${lookPanelHtml()}</div>` : ''}
@@ -187,23 +194,30 @@ function actsColumn(g: Save, w: WorldDef) {
     const atHome = g.player.loc === playerHomeId;
     const rows = [
         ...apptActions(g, w),
+        careActs(g, w),
         lifeActs(g, w),
         schoolActs(g, w),
         factionActs(g, w),
         holdingsActs(g, w),
         adventureActs(g, w),
-        ...questsHere(g).map(q => `<button class="mh-act is-quest mh-glass" data-act="quest-step" data-id="${esc(q.id)}"><i>📜</i><b>${esc(q.steps[q.step].what)}</b><small>${esc(q.title)}</small></button>`),
+        discoveryActs(g, w),
+        doorActs(g, w),
+        findActs(g, w),
+        gearActs(g, w),
+        questActs(g, w),
         ...(job ? [`<button class="mh-act is-work mh-glass ${offScreenWork(w) ? 'is-outing' : ''}" data-act="work" ${isOpen(g, job) ? '' : 'aria-disabled="true"'}><i>${icon('briefcase')}</i><b>${offScreenWork(w) ? 'Go to work' : 'Work a shift'} · ${job.shift} h</b><small>${isOpen(g, job) ? `${money(w, payOf(g, job.ranks[g.player.job!.rank].pay * job.shift))}` : `Open ${String(job.hours?.[0] ?? 0).padStart(2, '0')}:00–${String(job.hours?.[1] ?? 24).padStart(2, '0')}:00`}</small></button>`] : []),
         ...jobs.map(o => `<button class="mh-act mh-glass" data-act="apply" data-id="${esc(o.id)}" ${missingCourses(g, w, o).length || triedToday(g, o.id) ? 'aria-disabled="true"' : ''}><i>${icon('briefcase')}</i><b>Apply: ${esc(o.name)}</b><small>${missingCourses(g, w, o).length ? `${lex(w, 'needsCourse')}: ${esc(missingCourses(g, w, o).join(', '))}` : `${money(w, payOf(g, o.ranks[0].pay))}/h · interview 🎲 ${interviewChance(g, o, traitsOf(g))}%`}</small></button>`),
         ...(atHome && lockedOut(g) ? [`<button class="mh-act mh-glass is-warn" data-act="ph-open-homes"><i>${icon('home')}</i><b>${lex(w, 'lockedOutShort')}</b><small>${lex(w, 'lockedOutHint', appRef(w, 'homes'))}</small></button>`] : []),
         ...((atHome && !lockedOut(g)) || stayHere(g) ? [`<button class="mh-act mh-glass" data-act="sleep"><i>${icon('moon')}</i><b>Sleep until morning</b><small>${atHome ? 'Rest' : 'Staying the night here'}</small></button>`] : []),
+        roomActs(g, w),
         ...acts.map(a => `<button class="mh-act mh-glass ${a.outing ? 'is-outing' : ''}" data-act="do" data-id="${esc(a.id)}" ${canAfford(g, a) ? '' : 'aria-disabled="true" title="Not enough money"'}><i>${a.icon ?? ''}</i><b>${esc(a.label)}</b><small>${isScenario(w) ? '' : `${a.cost < 0 ? `+${money(w, -a.cost)}` : a.cost ? money(w, a.cost) : 'Free'} · `}${a.minutes} min${a.roll && !isScenario(w) ? ` · 🎲 ${chanceOf(g, a)}% chance` : ''}</small></button>`),
     ];
     { const cr = courseRow(g, w); if (cr) rows.splice(rows.length, 0, cr); }
+    rows.push(waitActs(g, w));
     rows.push(customActionRow());   // an action you name yourself
     const open = actsOpen();
     return `<aside class="mh-acts ${open ? '' : 'is-closed'}" aria-label="Things to do">
-        <button class="mh-acts-head mh-glass" data-act="dock-toggle">${icon(open ? 'up' : 'down')}<span>Things to do</span>${onPhone() ? `<em>${rows.length}</em>` : ''}</button>
+        <button class="mh-acts-head mh-glass" data-act="dock-toggle">${icon(open ? 'up' : 'down')}<span>Things to do</span>${onPhone() ? `<em>${rows.join('').split('class="mh-act ').length - 1}</em>` : ''}</button>
         ${open ? `<div class="mh-acts-list" data-keep="dock">${rows.join('')}</div>` : ''}</aside>`;
 }
 
@@ -226,7 +240,7 @@ export function hudHtml() {
     const g = game(); const w = g && getWorld(g.world);
     if (!g || !w) return '';
     // Home: no card of your own (no money, no needs); your persona is in the menu, as in a chat
-    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
+    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${detachHtml()}${moreHtml()}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
 }
 
 Object.assign(ACT, {
@@ -235,7 +249,7 @@ Object.assign(ACT, {
         const r = doStep(g, w, el.dataset.id!); if (!r) return;
         if (r.check) setPrompt('mundi_roll', `[Rules — a ${r.check.skill} check for a quest: d20 ${r.check.d20} ${r.check.bonus >= 0 ? '+' : '−'} ${Math.abs(r.check.bonus)} = ${r.check.total} vs DC ${r.check.dc}: ${r.check.grade.replace('-', ' ')}. Narrate {{user}} ${r.check.grade.includes('success') ? 'succeeding' : 'failing'} at it.]`, 0);
         toast(r.text, r.done ? 'success' : r.fight ? 'warn' : 'info'); r.msgs.forEach(m => toast(m, 'success'));
-        saveGame(); notify();
+        saveGame(); refreshPrompt(); notify();
     },
 });
 Object.assign(ACT, {

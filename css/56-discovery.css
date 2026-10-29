@@ -1,0 +1,28 @@
+/* Places that open up as the story goes: locked pins, buildings with floors, gates, the floors and add-a-place dialogs */
+#mundi-root .mu-pin.is-locked .dot { width: 18px; height: 18px; display: grid; place-items: center; border-color: #ffb454; color: #ffb454; }
+#mundi-root .mu-pin.is-locked .dot .mu-ic, #mundi-root .mu-me-pin:not(.is-link) .dot .mu-ic { width: 10px; height: 10px; }
+#mundi-root .mu-me-pin:not(.is-link) .dot:has(.mu-ic) { display: grid; place-items: center; color: #ffb454; }
+#mundi-root .mu-pin.is-locked .label { opacity: .8; }
+#mundi-root .mu-pin.is-building .dot { border-radius: 4px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 3px -3px 0 -1px #10162a, 3px -3px 0 1px var(--accent); }
+#mundi-root .mu-pin.is-gate .dot { border-color: #b46cff; background: radial-gradient(circle, #e6ccff 0 20%, #7a3db8 60%, #1a0b2e 100%); animation: mu-gate-pulse 2.4s ease-in-out infinite; }
+@keyframes mu-gate-pulse { 50% { box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 14px #b46cff; } }
+#mundi-root .mu-pin .label em { margin-left: 6px; font-style: normal; font-weight: 600; opacity: .75; font-size: .9em; }
+#mundi-root .mu-pop .mu-lock { display: flex; align-items: center; gap: 6px; color: #ffcf9a; }
+#mundi-root .mu-pop .mu-lock .mu-ic { width: 12px; height: 12px; flex: none; }
+#mundi-root .mu-pop-floors { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 2px; }
+#mundi-root .mu-pop-floors li { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 8px; background: rgba(255, 255, 255, .06); font-size: 12px; }
+#mundi-root .mu-pop-floors li.is-you { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+#mundi-root .mu-pop-floors li .mu-ic { width: 11px; height: 11px; color: #ffcf9a; }
+#mundi-root .mu-floors, #mundi-root .mu-addplace-body { overflow: auto; display: grid; align-content: start; gap: 6px; min-height: 0; }
+#mundi-root .mu-floor-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); }
+#mundi-root .mu-floor-row.is-you { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#mundi-root .mu-floor-row.is-locked { opacity: .85; }
+#mundi-root .mu-floor-row > em { font-style: normal; font-weight: 800; font-size: 12px; opacity: .8; }
+#mundi-root .mu-floor-row > span { display: grid; gap: 2px; min-width: 0; }
+#mundi-root .mu-floor-row small { opacity: .75; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; }
+#mundi-root .mu-floor-row small .mu-ic { width: 11px; height: 11px; flex: none; color: #ffcf9a; }
+#mundi-root .mu-floor-row .faces { display: flex; }
+#mundi-root .mu-floor-row .faces img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); margin-left: -6px; }
+#mundi-root .mu-floor-row .faces i { font-size: 11px; margin-left: 4px; font-style: normal; }
+#mundi-root .mu-addplace-body details summary { cursor: pointer; font-weight: 700; margin: 6px 0; }
+@media (max-width: 560px) { #mundi-root .mu-floor-row { grid-template-columns: 58px minmax(0, 1fr) auto; } #mundi-root .mu-floor-row .faces { display: none; } }

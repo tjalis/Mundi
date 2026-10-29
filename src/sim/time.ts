@@ -34,6 +34,7 @@ export function toNextPeriod(w: WorldDef, minutes: number) {
 // Moves time forward. Returns the messages the world's rules produced (rent, passing out…).
 export function advance(g: Save, w: WorldDef, mins: number): string[] {
     const out: string[] = [];
+    if ((g as any).mortal?.dead) return out;   // a dead hero's world stands still
     let left = Math.max(0, mins);
     while (left > 0) {
         const step = Math.min(left, 30);   // rules run at most every 30 game minutes, so long jumps stay correct

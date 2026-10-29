@@ -1,0 +1,11 @@
+/* Settings › Add-ons › LoRAs */
+#mundi-root .mu-loras { display: grid; gap: 6px; margin: 6px 0; }
+#mundi-root .mu-lora { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; }
+#mundi-root .mu-lora.is-off { opacity: .6; }
+#mundi-root .mu-lora > .mu-check:first-child { flex: 1 1 220px; min-width: 0; }
+#mundi-root .mu-lora > .mu-check:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mundi-root .mu-lora-num { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+#mundi-root .mu-lora-num input { width: 70px; }
+#mundi-root .mu-lora-for { display: inline-flex; gap: 10px; }
+#mundi-root .mu-lora-add { gap: 6px; }
+#mundi-root .mu-lora-add input { flex: 1; min-width: 0; }
