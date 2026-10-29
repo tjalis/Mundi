@@ -1,0 +1,11 @@
+/* World creator, "From lorebooks": the wizard (lorebooks → reading → what to keep) */
+#mundi-root .mu-fromlore .mu-fl-resume { margin-bottom: 14px; }
+#mundi-root .mu-fromlore .mu-fl-buckets { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 16px; margin-bottom: 8px; }
+#mundi-root .mu-fromlore .mu-bar { height: 8px; border-radius: 4px; background: var(--bg2); overflow: hidden; margin: 10px 0; }
+#mundi-root .mu-fromlore .mu-bar > i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+#mundi-root .mu-fromlore .mu-fl-tabs { display: flex; flex-wrap: wrap; gap: 6px; flex-direction: row; margin: 10px 0; }
+#mundi-root .mu-fromlore .mu-fl-list { display: flex; flex-direction: column; gap: 4px; max-height: 55vh; overflow: auto; padding-right: 4px; }
+#mundi-root .mu-fromlore .mu-fl-row { display: grid; grid-template-columns: auto minmax(140px, 260px) 1fr; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); }
+#mundi-root .mu-fromlore .mu-fl-row.is-off { opacity: .45; }
+#mundi-root .mu-fromlore .mu-fl-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { #mundi-root .mu-fromlore .mu-fl-row { grid-template-columns: auto 1fr; } #mundi-root .mu-fromlore .mu-fl-row small { grid-column: 1 / -1; white-space: normal; } }

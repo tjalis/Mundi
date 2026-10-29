@@ -24,6 +24,7 @@ import { mapEditorHtml, ME } from './mapedit.js';
 import { pickFile } from './cropper.js';
 import { icon, ICON_NAMES } from './icons.js';
 import { ACT, INPUT } from './reg.js';
+import { FL, fromLoreHtml, openFromLore } from './fromlore.js';
 
 type Tab = 'economy' | 'realm' | 'customs' | 'rpg' | 'general' | 'features' | 'needs' | 'maps' | 'homes' | 'actions' | 'jobs' | 'courses' | 'shop' | 'words' | 'character' | 'people' | 'lore' | 'books';
 const TABS: [Tab, string][] = [['general', 'General'], ['features', 'Features'], ['needs', 'Needs'], ['maps', 'Maps & places'], ['homes', 'Homes & rent'],
@@ -33,7 +34,7 @@ const SCENARIO_HIDES: Tab[] = ['realm', 'economy', 'rpg'];
 export const CW = {
     w: null as WorldDef | null, tab: 'general' as Tab, dirty: false, saving: false, confirmDel: false, leaveAsk: false, nameMiss: false,
     sel: { courses: 0, needs: 0, actions: 0, jobs: 0, zones: 0, kinds: '', traits: 0, origins: 0, people: 0, routine: '', lore: 0 } as Record<string, any>,
-    start: null as null | { name: string; style: string; base: string; mode: 'copy' | 'empty'; game: GameMode; scenario?: boolean },
+    start: null as null | { name: string; style: string; base: string; mode: 'copy' | 'empty' | 'lore'; game: GameMode; scenario?: boolean },
     allTabs: false,
 };
 export const W = () => CW.w!;
@@ -738,13 +739,14 @@ function startPage(): string {
                     <span class="mu-worldart" style="${w.cover ? `background-image:url('${worldFile(w, w.cover)}')` : ''}">${slidesHtml(w)}<span class="mu-style-tags"><em class="mu-style-tag is-${esc(styleOf(w))}">${esc(STYLES.find(x => x.id === styleOf(w))?.name ?? st.name)}</em>${toneTag(w)}</span></span>
                     <b data-notr>${esc(inWorld(w, w.name))}</b><small>${isCustom(w.id) ? 'Made by you' : 'Ready world'}</small><p data-notr>${esc(shortDesc(inWorld(w, w.description)))}</p></button>`).join('')}
                 <div class="mu-cw-startnew"><button class="mu-worldcard is-new ${s.mode === 'empty' ? 'is-on' : ''}" data-act="cw-start-empty"><span class="mu-worldart">${icon('map')}</span><b>Start from nothing</b><small>Only the ${esc(st.name)} rules</small><p>Needs, things to do, the device and the character sheet of this style; you draw the maps, places and people.</p></button>
-                <button class="mu-worldcard is-new is-later" aria-disabled="true"><span class="mu-worldart">${icon('book')}</span><b>From lorebooks</b><small>Coming soon</small><p>Your AI reads lorebooks you choose and builds the world from them.</p></button></div></div></section></div>
-            <div class="mu-row mu-cw-new-go"><span class="mu-muted">${s.mode === 'copy' ? `A copy of ${esc(base?.name ?? '')}` : `An empty ${esc(st.name)} world`}</span>
+                ${s.scenario ? '' : `<button class="mu-worldcard is-new ${s.mode === 'lore' ? 'is-on' : ''}" data-act="cw-start-lore"><span class="mu-worldart">${icon('book')}</span><b>From lorebooks</b><small>Your AI builds it</small><p>Your AI reads lorebooks you choose and builds the world from them: maps, places, people, groups and jobs.</p></button>`}</div></div></section></div>
+            <div class="mu-row mu-cw-new-go"><span class="mu-muted">${s.mode === 'copy' ? `A copy of ${esc(base?.name ?? '')}` : s.mode === 'lore' ? `A ${esc(st.name)} world built from lorebooks` : `An empty ${esc(st.name)} world`}</span>
                 <button class="mu-primary mu-big ${s.name.trim() ? '' : 'is-dim'}" data-act="cw-start-go" ${base ? '' : 'aria-disabled="true"'}>${s.scenario ? 'Create the Home' : 'Create the world'} ▶</button></div>
         </div></div>`;
 }
 
 export function creatorHtml(): string {
+    if (FL.on && !CW.w) return fromLoreHtml();
     if (CW.start && !CW.w) return startPage();
     const w = CW.w; if (!w) return '';
     const body = CW.tab === 'general' ? tabGeneral(w) : CW.tab === 'features' ? tabFeatures(w) : CW.tab === 'needs' ? tabNeeds(w) : CW.tab === 'maps' ? (isScenario(w) ? houseMapsHtml(w) : mapEditorHtml(w))
@@ -772,7 +774,7 @@ export function creatorHtml(): string {
 let backTo = 'newgame';
 export function openCreatorNew(style = 'modern', scenario = false) {
     if (!STYLES.find(x => x.id === style)?.ready) style = 'modern';
-    backTo = state.view; CW.w = null; CW.confirmDel = false; CW.leaveAsk = false; CW.dirty = false;
+    backTo = state.view; CW.w = null; CW.confirmDel = false; CW.leaveAsk = false; CW.dirty = false; FL.on = false;
     CW.nameMiss = false; CW.start = { name: '', style, base: presetsOf(style, scenario)[0]?.id ?? 'modern', mode: 'copy', game: 'lifesim', scenario };
     state.view = 'creator' as any; notify();
 }
@@ -785,7 +787,7 @@ export function openCreatorEdit(id: string) {
 export const leaveHtml = (k: string) => `<div class="mu-dlg-veil" data-act="${k}-leave-stay"><div class="mu-dlg mu-panel mu-leave" role="dialog" data-act="lib-stay">
     <h3>Unsaved changes</h3><p>You have changes that are not saved. Leave anyway?</p>
     <div class="mu-row mu-dlg-btns"><button data-act="${k}-leave-stay">Stay</button><button class="mu-danger" data-act="${k}-leave-go">Leave without saving</button><button class="mu-primary" data-act="${k}-leave-save">${icon('save')}<span>Save and leave</span></button></div></div></div>`;
-function close() { CW.leaveAsk = false; CW.confirmDel = false; CW.dirty = false; CW.w = null; CW.start = null; state.view = (backTo === 'creator' ? 'newgame' : backTo) as any; notify(); }
+function close() { FL.on = false; CW.leaveAsk = false; CW.confirmDel = false; CW.dirty = false; CW.w = null; CW.start = null; state.view = (backTo === 'creator' ? 'newgame' : backTo) as any; notify(); }
 
 const NEW: Record<string, () => [string, any]> = {
     rattr: () => ['rpg.attributes', { id: newId('attr'), name: 'New attribute', short: 'NEW' }],
@@ -844,13 +846,15 @@ Object.assign(ACT, {
     'cw-start-game': (el) => { if (!CW.start || GAME_MODES.find(m => m.id === el.dataset.v)?.soon) return; CW.start.game = el.dataset.v as GameMode; notify(); },
     'cw-mode': (el) => { const w = CW.w; if (!w || GAME_MODES.find(m => m.id === el.dataset.v)?.soon) return; w.mode = el.dataset.v as GameMode; CW.dirty = true; notify(); },
     'cw-start-empty': () => { if (!CW.start) return; CW.start.mode = 'empty'; CW.start.base = presetsOf(CW.start.style, !!CW.start.scenario).find(w => !isCustom(w.id))?.id ?? CW.start.base; notify(); },
+    'cw-start-lore': () => { if (!CW.start) return; CW.start.mode = 'lore'; CW.start.base = presetsOf(CW.start.style, false).find(w => !isCustom(w.id))?.id ?? CW.start.base; notify(); },
     'cw-start-cancel': () => close(),
     'cw-start-go': async () => {
         const s = CW.start!;
         // no name yet: point at the name field instead of doing nothing
         if (!s.name.trim()) { CW.nameMiss = true; notify(); setTimeout(() => { const i = document.querySelector<HTMLInputElement>('[data-input="cw-start-name"]'); i?.focus(); i?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); return; }
+        if (s.mode === 'lore') { openFromLore(s); return; }
         try {
-            CW.w = await busy('Creating the world', () => newWorldFrom(s.base, s.mode, s.name));
+            CW.w = await busy('Creating the world', () => newWorldFrom(s.base, s.mode as 'copy' | 'empty', s.name));
             CW.w.mode = s.scenario ? 'lifesim' : s.game;
             if (s.scenario && !CW.w.scenario) CW.w.scenario = { premise: '' };
             CW.start = null; CW.tab = 'general'; CW.dirty = true; CW.confirmDel = false;
