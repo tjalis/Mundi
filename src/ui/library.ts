@@ -6,7 +6,7 @@ import { state, notify, esc, game, toast, busy, settings, saveSettings, type Lib
 import { getWorld, loadWorld, BUILT_IN, activeStatuses, worlds } from '../core/world.js';
 import {
     ctx, characters, charOf, thumb, fullCharacter, saveCharacter, personas, savePersona, personaThumb, persona,
-    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, selectedGroup, bindChatLore, type CardPatch,
+    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, bindChatLore, type CardPatch,
     charLorebooks, setCharLorebooks, importCharacterFiles, importLorebookFiles, importPersonaPictures, folders, tagIdsOf, newFolder, putInFolder, isFav, setFavorite, deleteCharacters, deletePersonas, deleteLorebooks,
     createCharacter, createPersona, createLorebook, duplicateCharacter, duplicatePersona, duplicateLorebook,
     setCharacterImage, setPersonaImage, defaultPersona, setDefaultPersona, personaSheet, setPersonaSheet,
@@ -14,7 +14,7 @@ import {
     bgList, bgThumb, bgUrl, bgUpload, bgRename, bgDelete, bgFolderCreate, bgFolderPut, type Bgs,
     refreshList, folderColor, setFolderColor, deleteFolder, personaLore, setPersonaLore, exportCharacter, cardFile, fileNameOf, baseSpriteFolder, loreCount, charTags, tagColor, tagCharacter, untagCharacter, allTags, cardTokens, cachedTokens, folderMade, renameFolder, characterChats, useGreeting, openCharacter,
 } from '../st/bridge.js';
-import { gameEntry, heroDescription, initialsAvatar } from '../sim/game.js';
+import { currentEntry, heroDescription, initialsAvatar } from '../sim/game.js';
 import { sceneText } from '../sim/prompt.js';
 import { ACT, INPUT } from './reg.js';
 import { leaveHtml } from './creator.js';
@@ -25,6 +25,7 @@ import { pickAndCrop, pickFile } from './cropper.js';
 import { toggleTrait } from './traits.js';
 import { nativeHost } from './native.js';
 import { presetsTabHtml } from './castpresets.js';
+import { spriteLookHtml, spriteTileButton, checkSprites, spriteStatus, drawEveryone, personaKey } from './spritegen.js';
 
 const L = state.lib;
 type Tab = 'characters' | 'personas' | 'lorebooks' | 'backgrounds' | 'presets' | 'save' | 'world' | 'st-characters' | 'st-personas' | 'st-worldinfo';
@@ -99,8 +100,17 @@ function items(tab: ListTab): Item[] {
     else if (tab === 'personas') { const d = defaultPersona(); list = personas().map(p => ({ id: p.file, name: p.name, img: personaThumb(p.file), fav: FAV.is(tab, p.file), crown: p.file === d })); }
     else if (tab === 'backgrounds') { if (!B()) { loadBgs(); return []; } list = B()!.images.map(f => ({ id: f, name: f.replace(/\.[^.]+$/, ''), img: bgThumb(f), fav: false })); }
     else list = lorebooks().map(n => ({ id: n, name: n, img: '', fav: FAV.is(tab, n) }));
-    return sortItems(tab, list.filter(i => match(i.name) && (!L.favOnly || i.fav)));
+    list = list.filter(i => match(i.name) && (!L.favOnly || i.fav));
+    if (NS.on && (tab === 'characters' || tab === 'personas')) {
+        const key = (i: Item) => (tab === 'personas' ? personaKey(i.id) : i.id);
+        checkSprites(list.map(key));
+        list = list.filter(i => { const st = spriteStatus(key(i)); return !!st && st !== 'has'; });
+    }
+    return sortItems(tab, list);
 }
+// The "No sprites" filter: only the characters (or personas) whose Expressions folder is empty.
+const NS = { on: false };
+const sprKey = (tab: ListTab, id: string) => (tab === 'personas' ? personaKey(id) : id);
 
 /* ---------- sorting the list (favorites stay on top) ---------- */
 
@@ -160,7 +170,7 @@ function field(label: string, key: string, value: any, kind: 'text' | 'area' | '
 }
 const advHead = () => `<h4 class="mu-lib-advhead">Advanced settings</h4>`;
 const dirty = () => Object.keys(L.draft).length > 0;
-// The action bar under a card: Save (while editing), Duplicate, Expressions (characters), Delete, side by side.
+// The action bar under a card: Save (while editing), Duplicate, Expressions (characters, personas), Delete, side by side.
 function actionBar(o: { save?: boolean; dup?: string; expr?: boolean; del?: string | null } = {}) {
     const save = o.save ?? L.edit;
     return `<div class="mu-lib-savebar">
@@ -302,19 +312,21 @@ function outfitBar(avatar: string) {
         <div class="mu-lib-searchrow"><input type="text" placeholder="New outfit (a folder name, like pajamas)" value="${esc(EO.name)}" data-input="lib-outfit-name" data-focus="lib-outfit-name">${btn('lib-outfit-add', 'plus', 'Add')}</div>
         <small class="mu-muted">An outfit is a subfolder of their Expressions folder${EO.outfit ? ` (<span data-notr>${esc(baseSpriteFolder(avatar))}/${esc(EO.outfit)}</span>)` : ''}. Upload its pictures here; in the game, click their sprite to change clothes.</small></div>`;
 }
+// avatar: a character's card file, or "persona:<file>" (the persona's folder is its name)
 function exprHtml(avatar: string) {
-    const c = charOf(avatar);
-    const back = `<div class="mu-gal-albumhead">${btn('lib-expr-close', 'back', 'Back to the card', 'mu-ghost')}<div><h3>Expressions</h3><small data-notr>${esc(c?.name ?? avatar)}</small></div></div>`;
+    const name = avatar.startsWith('persona:') ? baseSpriteFolder(avatar) : charOf(avatar)?.name ?? avatar;
+    const back = `<div class="mu-gal-albumhead">${btn('lib-expr-close', 'back', avatar.startsWith('persona:') ? 'Back to the persona' : 'Back to the card', 'mu-ghost')}<div><h3>Expressions</h3><small data-notr>${esc(name)}</small></div></div>`;
+    const look = spriteLookHtml(avatar, EO.outfit);
     if (L.sprites === null) {
         const want = EO.outfit;
         fetchSprites(avatar, want).then(list => { if (L.expr === avatar && EO.outfit === want) { L.sprites = list; notify(); } });
-        return `${back}${outfitBar(avatar)}<p class="mu-muted">Loading the pictures…</p>`;
+        return `${back}${outfitBar(avatar)}${look}<p class="mu-muted">Loading the pictures…</p>`;
     }
     const byLabel = new Map<string, any[]>();
     for (const s of L.sprites) { const k = String(s.label); if (!byLabel.has(k)) byLabel.set(k, []); byLabel.get(k)!.push(s); }
     const labels = [...new Set([...expressionLabels(), ...byLabel.keys()])];
     const done = labels.filter(l => byLabel.has(l)).length;
-    return `${back}${outfitBar(avatar)}<p class="mu-muted">${done} / ${labels.length} expressions have a picture. The character shows the picture of the emotion of each line; “neutral” is used when there is none.</p>
+    return `${back}${outfitBar(avatar)}${look}<p class="mu-muted">${done} / ${labels.length} expressions have a picture. The character shows the picture of the emotion of each line; “neutral” is used when there is none.</p>
         <div class="mu-expr-grid">${labels.map(l => {
             const files = byLabel.get(l) ?? [];
             const f = files[0];
@@ -323,7 +335,7 @@ function exprHtml(avatar: string) {
                 <div class="mu-expr-img">${f ? `<img src="${esc(f.path)}" alt="" loading="lazy">` : icon('image')}</div>
                 <b data-notr>${esc(l)}</b>${files.length > 1 ? `<small>${files.length}</small>` : ''}
                 <div class="mu-row">${ibtn('lib-expr-up', 'upload', f ? 'Replace' : 'Upload', '', `data-l="${esc(l)}" data-s="${esc(sprite)}"`)}
-                    ${f ? ibtn('lib-expr-del', 'trash', 'Delete', 'mu-danger', `data-l="${esc(l)}" data-s="${esc(sprite)}"`) : ''}</div>
+                    ${f ? ibtn('lib-expr-del', 'trash', 'Delete', 'mu-danger', `data-l="${esc(l)}" data-s="${esc(sprite)}"`) : ''}${spriteTileButton(avatar, l, EO.outfit)}</div>
             </div>`;
         }).join('')}</div>
         <p class="mu-muted">Which emotion each line has is decided by the Character Expressions extension (in Settings › Extensions).</p>`;
@@ -354,7 +366,7 @@ function personaDetail(file: string) {
     const head = headHtml('personas', file, p.name, personaThumb(file), file, `${file === persona() ? '<span class="mu-tag">In use</span>' : ''}${isDef ? '<span class="mu-tag is-gold">Default</span>' : ''}`, crown);
     const sheet = personaSheet(file);
     const w = sheet ? getWorld(sheet.world) : null;
-    const bar = actionBar({ dup: 'lib-dup', del: 'lib-del-one' });
+    const bar = actionBar({ dup: 'lib-dup', expr: true, del: 'lib-del-one' });
     const sheetRead = sheet && w?.sheet.traits ? `<section class="mu-lib-read"><h4>Character sheet</h4><div class="mu-chips">${w.sheet.traits.flatMap(t => (sheet.traits?.[t.id] ?? []).map((x: string) => `<span class="mu-chip"><small>${esc(t.label)}</small> ${esc(x)}</span>`)).join('') || '<span class="mu-muted">—</span>'}</div></section>` : '';
     // the character sheet only exists to write a new character quickly (new game): the Library shows the persona itself
     void sheetRead;
@@ -471,7 +483,7 @@ function saveTab() {
     const g = game();
     if (!g) return '<p class="mu-muted">No save is open. Load a save to see its notes.</p>';
     const m = ctx().chatMetadata ?? {};
-    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(gameEntry(selectedGroup())?.title ?? '')}</small></div></header>`;
+    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(currentEntry()?.title ?? '')}</small></div></header>`;
     if (!L.edit) return `${head}${read('Author\'s Note', m.note_prompt)}${read('Lorebook', chatLore(), false)}`;
     return `${head}<div class="mu-lib-form">
         ${field('Author\'s Note', 'note_prompt', m.note_prompt ?? '', 'area', { rows: 6, hint: 'A standing instruction for this save only: tone, pacing, what to focus on.' })}
@@ -528,7 +540,7 @@ function pickFiles(accept: string): Promise<File[]> {
 interface Row extends Item { folder?: boolean; count?: number }
 function rows(tab: ListTab): Row[] {
     const list = items(tab);
-    if (L.q || L.favOnly) return list;   // searching shows everything, without folders
+    if (L.q || L.favOnly || NS.on) return list;   // searching (and the filters) show everything, without folders
     if (L.folder) return list.filter(i => F.of(tab, i.id).includes(L.folder!));
     const fs = F.list(tab); const ids = new Set(fs.map(f => f.id));
     const out: Row[] = sortFolders(tab, fs.map(f => ({ id: f.id, name: f.name, img: '', fav: false, folder: true, count: list.filter(i => F.of(tab, i.id).includes(f.id)).length })));
@@ -583,7 +595,7 @@ function bulkBar(tab: ListTab) {
 const CREATE: Record<ListTab, string> = { characters: 'New character', personas: 'New persona', lorebooks: 'New lorebook', backgrounds: 'Upload pictures' };
 function listPane(tab: ListTab) {
     const list = rows(tab);
-    const folder = L.folder && !L.q && !L.favOnly ? F.list(tab).find(f => f.id === L.folder) : null;
+    const folder = L.folder && !L.q && !L.favOnly && !NS.on ? F.list(tab).find(f => f.id === L.folder) : null;
     return `<aside class="mu-lib-list mu-panel ${grid() ? 'is-grid' : ''} ${tab === 'backgrounds' ? 'is-bgs' : ''}">
         <div class="mu-lib-filter">
             <div class="mu-lib-tools">
@@ -593,9 +605,11 @@ function listPane(tab: ListTab) {
                 ${ibtn('lib-picking', 'select', 'Select several (or Ctrl+click, Shift+click)', L.picking ? 'is-on' : '')}
                 ${ibtn('lib-search', 'search', 'Search', L.searching || L.q ? 'is-on' : '')}
                 ${tab === 'backgrounds' ? '' : ibtn('lib-favonly', L.favOnly ? 'starFill' : 'star', 'Only favorites', `mu-favbtn ${L.favOnly ? 'is-on' : ''}`)}
+                ${tab === 'characters' || tab === 'personas' ? ibtn('lib-nospr', 'image', 'Only those with no sprites', NS.on ? 'is-on' : '') : ''}
                 ${sortBtn(tab)}${tab === 'backgrounds' ? '' : ibtn('lib-view', grid() ? 'list' : 'grid', grid() ? 'Show as a list' : 'Show as a grid')}
             </div>
             ${L.searching || L.q ? `<input type="search" placeholder="Search" value="${esc(L.q)}" data-input="lib-q" data-focus="lib-q">` : ''}
+            ${NS.on && (tab === 'characters' || tab === 'personas') ? `<div class="mu-lib-nospr"><small class="mu-muted">${list.length ? `${list.length} with no sprites` : 'Everyone here has sprites (still looking at some).'}</small>${list.length ? btn('lib-nospr-draw', 'image', `Draw sprites for ${list.length === 1 ? 'this one' : `these ${list.length}`}`, 'mu-primary') : ''}</div>` : ''}
             ${folder ? `<div class="mu-lib-crumb">${btn('lib-folder-up', 'back', 'Folders', 'mu-ghost', 'data-drop=""')}<b data-notr>${icon('folder')} ${esc(folder.name)}</b>
                 ${tab === 'backgrounds' ? '' : `<input type="color" title="Folder color" value="${esc((tab === 'characters' ? folderColor(folder.id) : (folder as any).color) || '#4fb0ff')}" data-input="lib-folder-color">${tab === 'characters' || tab === 'lorebooks' ? ibtn('lib-folder-zip', 'download', 'Export this folder as a zip', 'mu-ghost') : ''}${ibtn('lib-folder-ren', 'edit', 'Rename this folder', 'mu-ghost')}${ibtn('lib-folder-del', 'trash', 'Delete this folder (what is inside stays)', 'mu-ghost')}`}</div>` : ''}
         </div>
@@ -693,7 +707,7 @@ const NOTES: Record<string, string> = {
 function detailPane(tab: ListTab) {
     let body: string;
     if (!L.sel) body = `<p class="mu-muted mu-pad">${tab === 'characters' ? 'Choose a character.' : tab === 'personas' ? 'Choose a persona.' : tab === 'backgrounds' ? 'Choose a picture. Pictures here are SillyTavern\'s backgrounds; Mundi uses them for its scenes.' : 'Choose a lorebook.'}</p>`;
-    else if (tab === 'characters' && L.expr === L.sel) body = exprHtml(L.sel);
+    else if ((tab === 'characters' || tab === 'personas') && L.expr === sprKey(tab, L.sel)) body = exprHtml(L.expr);
     else body = tab === 'characters' ? charDetail(L.sel) : tab === 'personas' ? personaDetail(L.sel) : tab === 'backgrounds' ? bgDetail(L.sel) : loreDetail(L.sel);
     return `<section class="mu-lib-detail mu-panel" data-keep="lib-detail">${L.sel ? `${btn('lib-unsel', 'back', 'List', 'mu-ghost mu-lib-back')}` : ''}${body}</section>`;
 }
@@ -748,6 +762,14 @@ export function openLibrary(tab?: string) {
     state.view = 'library'; L.draft = {}; state.modal = null; L.picked = []; L.picking = false; L.expr = null;
     if (L.tab === 'lorebooks' && L.sel && L.lore?.name !== L.sel) select(L.sel);
     notify();
+}
+// A character's (or "persona:<file>") Expressions page, from the game or Settings; Back returns there.
+export function openExpressions(key: string) {
+    const from = state.view, isP = key.startsWith('persona:');
+    openLibrary(isP ? 'personas' : 'characters');
+    if (from !== 'library') backTo = from;
+    EO.outfit = '';
+    void select(isP ? key.slice(8) : key).then(() => { L.expr = key; L.sprites = null; notify(); });
 }
 export function libraryEscape(): boolean {
     if (!L.picked.length && !L.picking) return false;
@@ -854,7 +876,7 @@ async function doDuplicate() {
 
 Object.assign(ACT, {
     'lib-clore-del': async (el) => { const a = L.sel; if (!a) return; try { await setCharLorebooks(a, charLorebooks(a).filter(n => n !== el.dataset.name)); } catch (e: any) { toast(String(e?.message ?? e), 'error'); } notify(); },
-    'lib-back': () => { if (!guard()) return; state.view = (backTo === 'worldcfg' && game() ? 'worldcfg' : 'menu') as any; clearPicks(); notify(); },
+    'lib-back': () => { if (!guard()) return; state.view = (backTo === 'worldcfg' ? (game() ? 'worldcfg' : 'menu') : ['scene', 'map', 'chat', 'settings'].includes(backTo) && (backTo === 'settings' || game()) ? backTo : 'menu') as any; backTo = 'menu'; clearPicks(); notify(); },
     'lib-tab': (el) => { if (!guard()) return; if (el.dataset.tab === 'backgrounds') L.bgs = null; L.tab = el.dataset.tab!; L.sel = null; L.entry = null; L.expr = null; L.q = ''; L.searching = false; L.folder = null; state.modal = null; clearPicks(); notify(); },
     'lib-sel': (el, e) => clickItem(el.dataset.id!, e as MouseEvent),
     'lib-unsel': () => { if (!guard()) return; L.sel = null; L.expr = null; notify(); },
@@ -955,7 +977,14 @@ Object.assign(ACT, {
     },
     'lib-crown': () => { const id = L.sel; if (!id) return; setDefaultPersona(defaultPersona() === id ? null : id); notify(); },
     // expressions
-    'lib-expr': () => { if (!guard() || !L.sel) return; L.expr = L.sel; L.sprites = null; notify(); },
+    'lib-expr': () => { if (!guard() || !L.sel || !listTab()) return; L.expr = sprKey(listTab()!, L.sel); L.sprites = null; notify(); },
+    'lib-nospr': () => { NS.on = !NS.on; notify(); },
+    'lib-nospr-draw': () => {
+        const tab = listTab(); if (!tab) return;
+        const n = drawEveryone(items(tab).map(i => sprKey(tab, i.id)));
+        toast(n ? `Drawing ${n === 1 ? '1 person' : `${n} people`} on ComfyUI: everyone's neutral sprite first, then the rest.` : 'They are all being drawn already.', 'info');
+        notify();
+    },
     'lib-expr-close': () => { L.expr = null; EO.outfit = ''; notify(); },
     'lib-outfit': (el) => { EO.outfit = el.dataset.o ?? ''; L.sprites = null; notify(); },
     'lib-outfit-add': () => { const id = L.expr; if (!id) return; const n = addOutfit(id, EO.name); if (!n) { toast('Write the folder name.', 'info'); return; } EO.name = ''; EO.outfit = n; L.sprites = null; notify(); },

@@ -1,6 +1,7 @@
 // The scene: the place, the people in it (Expressions sprites), the conversation and the composer.
 // The conversation IS the group chat: generation, streaming, swipes, regenerate, continue, impersonate,
 // editing and deleting all use SillyTavern's own functions.
+import { attachHtml } from './attach.js';
 import { isRpg } from '../sim/rpg.js';
 import { setHtml } from '../core/safe.js';
 import { lex } from '../core/lexicon.js';
@@ -43,6 +44,7 @@ import { stFormat, avatarHtml, cardPicHtml, portraitHtml, lightboxHtml, lookPane
 import { avatarUrl } from '../st/bridge.js';
 import { charPicker } from './charpick.js';
 import { RAD, radialHtml } from './radial.js';
+import { spriteBadge } from './spritegen.js';
 
 const LOG_SIZE = 40;
 
@@ -219,7 +221,7 @@ export function sceneHtml() {
     const sv = stageVars(here.map(r => r.avatar), a => !!spriteFor(a, ex[a] ?? null)); void withSprite;
     const sprites = here.map((r, k) => {
         const src = spriteFor(r.avatar, ex[r.avatar] ?? null);
-        return `<figure class="mu-sprite ${isWith(g, r.avatar) ? 'is-with' : ''} ${RAD.who === r.avatar ? 'is-menu' : ''}" style="--i:${k};${sv.get(r.avatar)}" title="${esc(r.met ? r.name : 'Someone')}" data-act="spr-menu" data-who="${esc(r.avatar)}">${src ? `<img src="${esc(src)}" alt="">` : `<span class="is-avatar mu-zoomable"><img src="${esc(avatarUrl(r.avatar))}" alt="" draggable="false"></span>`}<figcaption>${esc(r.met ? r.name : 'Someone')}</figcaption>${radialHtml(r.avatar, r)}</figure>`;
+        return `<figure class="mu-sprite ${isWith(g, r.avatar) ? 'is-with' : ''} ${RAD.who === r.avatar ? 'is-menu' : ''}" style="--i:${k};${sv.get(r.avatar)}" title="${esc(r.met ? r.name : 'Someone')}" data-act="spr-menu" data-who="${esc(r.avatar)}">${src ? `<img src="${esc(src)}" alt="">` : `<span class="is-avatar mu-zoomable"><img src="${esc(avatarUrl(r.avatar))}" alt="" draggable="false"></span>${spriteBadge(r.avatar)}`}<figcaption>${esc(r.met ? r.name : 'Someone')}</figcaption>${radialHtml(r.avatar, r)}</figure>`;
     }).join('');
     return `<div class="mu-scene">
         <div class="mu-scene-bg" data-morph-skip data-keep="scene-bg" data-place="${esc(g.player.loc)}" style="${background(g, w)}"></div>
@@ -331,6 +333,7 @@ export function chatHtml() {
                 <button data-act="sc-open" data-v="add">${icon('users')}<span>Add a character</span></button>
                 <button data-act="sc-open" data-v="persona"><span class="mh-drawer-mew"><img class="mh-drawer-me" src="${esc(personaThumb())}" alt=""></span><span>Your persona<small data-notr>${esc(personaName())}</small></span></button>
                 <button data-act="sc-open" data-v="lore" class="mh-drawer-lore" title="${esc(chatLores().join(', '))}">${icon('book')}<span>Chat lorebooks${chatLores().length ? `<small data-notr>${chatLores().length > 1 ? `${chatLores().length} lorebooks · ` : ''}${esc(chatLores()[0])}</small>` : '<small>None</small>'}</span></button>
+                <button data-act="att-open">${icon('globe')}<span>Attach a world</span></button>
                 <button data-act="chat-new">${icon('plus')}<span>New chat</span></button>
                 <button data-act="drawer-look" class="${DRAWER.look ? 'is-on' : ''}">${icon('palette')}<span>Look</span></button>
                 <button data-act="open-settings">${icon('gear')}<span>Settings</span></button>
@@ -338,6 +341,7 @@ export function chatHtml() {
                 ${DRAWER.look ? `<div class="mh-drawer-look" data-keep="look">${lookPanelHtml()}</div>` : ''}</nav></div>
         ${portraitHtml()}${lightboxHtml()}${lookConfirmHtml()}
         ${scenarioPicker()}
+        ${attachHtml()}
         ${extMenuHtml()}
     </div>`;
 }

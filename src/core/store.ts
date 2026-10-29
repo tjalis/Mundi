@@ -38,8 +38,10 @@ export interface UiPrefs {
     scalePhone?: number; scaleLand?: number; hudPhone?: number; hudLand?: number;   // hud*: the game HUD on a phone, on top of the overall scale
       // the overall scale on a phone (upright and sideways); `scale` is for computers
 }
-export interface LastPlayed { kind: 'world' | 'chat'; group?: string; avatar?: string; chatId?: string }
+export interface LastPlayed { kind: 'world' | 'chat'; group?: string; avatar?: string; chatId?: string; /** a world attached to one of your own chats */ attached?: boolean }
 export interface GameEntry { groupId: string; world: string; title: string; persona: string; created: number; last: number }
+// A world attached to one of your own chats (one-on-one or group): the chat stays yours, the save lives in it.
+export interface AttachedEntry extends GameEntry { chatId: string; avatar?: string; attached: true }
 export interface Settings {
     lang: string; openOnStart: boolean; ui: UiPrefs; games: GameEntry[]; lastGame: string | null;
     last: LastPlayed | null;   // what "Continue" opens: the last world save or scenario chat played in Mundi
@@ -47,6 +49,10 @@ export interface Settings {
     lib: LibPrefs;
     /** groups of people the player made in the Library (Presets): who, households, relations, how they see you */
     castPresets?: CastPreset[];
+    /** worlds attached to your own chats (sim/attach.ts) */
+    attached?: AttachedEntry[];
+    /** RPG systems you made (from lorebooks, or saved from a world): chosen like the built-in ones */
+    rpgSystems?: { id: string; name: string; desc: string; def: any }[];
 }
 export interface CastPreset { id: string; name: string; cast: string[]; hh: { members: string[]; ties: { a: string; b: string; type: string; tone: string }[] }[]; rels: { a: string; b: string; type: string; tone: string }[]; approval: Record<string, number> }
 // Favorites and folders for personas and lorebooks (SillyTavern only has them for characters, as folder tags).
@@ -128,6 +134,20 @@ export function game(): Save | null {
 export function setGame(s: Save) { ctx().chatMetadata.mundi = s; }
 export const saveGame = () => { if (!TUT.save && !SAVE.readOnly) ctx().saveMetadataDebounced(); };
 export const nowAbs = (g: Save) => g.day * 1440 + g.minutes;
+// A save attached to one of your own chats: which chat it is, where the world started in it, and what attaching
+// changed in the chat (put back when the world is detached).
+export interface Host {
+    kind: 'solo' | 'group'; avatar?: string; group?: string; chatId: string;
+    /** the chat's length when the world was attached: Mundi never hides or touches the lines before it */
+    attachedAt: number;
+    /** the world's lorebook, and the chat's lorebooks before attaching */
+    lore: string; prevLore: string[];
+    /** the world's Author's Note went in (the chat had none) */
+    noteSet?: boolean;
+    /** a group chat's muted members before attaching */
+    prevDisabled?: string[];
+}
+export const hostOf = (g: Save | null | undefined): Host | null => ((g as any)?.host ?? null);
 
 /* ---------- session ---------- */
 

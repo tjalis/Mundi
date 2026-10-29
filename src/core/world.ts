@@ -91,7 +91,8 @@ export interface ActionDef {
 }
 export interface RollOutcome { text: string; money?: number; effects?: Record<string, number> }
 export interface Attribute { id: string; name: string; desc?: string }
-export interface TraitGroup { id: string; label: string; max: number; options: string[] }
+/** `max`: how many a player may pick (none, or 0: no limit). */
+export interface TraitGroup { id: string; label: string; max?: number; options: string[] }
 export interface Origin {
     id: string; name: string; desc?: string; money: number; home?: string; knows?: number;
     attributes?: Record<string, number>;
@@ -200,7 +201,7 @@ export interface WorldDef {
         age?: { min: number; max: number; default: number };
         appearance?: { id: string; label: string; options: string[] }[];
         attributes?: { points: number; min: number; max: number; list: Attribute[] };
-        /** Ready-made descriptions the player picks (e.g. Proficiency: strong, smart), up to `max` each. */
+        /** Ready-made descriptions the player picks (e.g. Proficiency: strong, smart), up to `max` each if set. */
         traits?: TraitGroup[];
         /** What the player chooses when making a character (each one on unless set to false). */
         ask?: { portrait?: boolean; age?: boolean; appearance?: boolean; origin?: boolean; traits?: boolean; bio?: boolean };

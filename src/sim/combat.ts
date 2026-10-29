@@ -9,8 +9,8 @@
 import { lex } from '../core/lexicon.js';
 import { esc, type Save } from '../core/store.js';
 import { getWorld, type WorldDef } from '../core/world.js';
-import { rpgOf, type Ability, type Foe, type RpgClass, type Weapon, type Element } from '../core/rpgdef.js';
-import { talentSum, isRpg, sheetOf, classOf, mod, prof, attr, hpMax, changeHp, addXp, addRenown, count, rollCheck, checkWon, type Sheet } from './rpg.js';
+import { rpgOf, roleAttr, type Ability, type Foe, type RpgClass, type Weapon, type Element } from '../core/rpgdef.js';
+import { talentSum, isRpg, sheetOf, classOf, mod, prof, attr, hpMax, changeHp, addXp, addRenown, count, rollCheck, checkWon, weaponOf, type Sheet } from './rpg.js';
 import { partyOf, memberName, memberKey, dismissMerc, type Member, type Row } from './party.js';
 import { bondOf, isPartner, bump } from './social.js';
 import { note } from './facts.js';
@@ -58,16 +58,19 @@ const roll = (n: number, sides: number) => { let t = 0; for (let i = 0; i < n; i
 const d20 = () => roll(1, 20);
 const V = (a: Fighter, he: string, you: string) => (a.who === 'you' ? you : he);
 const FISTS: Weapon = { name: 'fists', dice: 1, sides: 4, attr: 'str' };
+// Bare hands use the RPG's strength-like attribute (a system may have no STR).
+const fists = (w: WorldDef): Weapon => ({ ...FISTS, attr: roleAttr(rpgOf(w), 'melee') });
 const acOf = (armor: number, dex: number) => 10 + armor + (armor >= 5 ? 0 : armor >= 3 ? Math.min(2, dex) : dex);
 
 /* ---------- who fights ---------- */
 
 function youFighter(w: WorldDef, g: Save, s: Sheet): Fighter {
-    const c = classOf(w, s); const wp = c?.weapon ?? FISTS; const m = mod(attr(s, wp.attr));
+    const c = classOf(w, s); const own = weaponOf(w, s); const wp = own ?? fists(w); const m = mod(attr(s, wp.attr));
+    const r = rpgOf(w); const def = roleAttr(r, 'defense'), ini = roleAttr(r, 'initiative');
     return {
         id: 'you', name: 'You', side: 'us', who: 'you', ref: 'you', row: wp.ranged ? 'back' : 'front',
-        hp: s.hp, max: hpMax(w, s), ac: acOf(c?.armor ?? 0, mod(attr(s, 'dex'))) + talentSum(w, s, 'armor'), atk: prof(s.level) + m + talentSum(w, s, 'attack'), dice: wp.dice, sides: wp.sides, dmg: m + talentSum(w, s, 'damage'),
-        ranged: !!wp.ranged, weapon: wp.name, init: mod(attr(s, 'dex')) + talentSum(w, s, 'initiative'), heavy: (c?.armor ?? 0) >= 5, ability: c?.ability, level: s.level,
+        hp: s.hp, max: hpMax(w, s), ac: acOf(c?.armor ?? 0, mod(attr(s, def))) + talentSum(w, s, 'armor'), atk: (own && !own.trained ? 0 : prof(s.level)) + m + talentSum(w, s, 'attack'), dice: wp.dice, sides: wp.sides, dmg: m + talentSum(w, s, 'damage'),
+        ranged: !!wp.ranged, weapon: wp.name, init: mod(attr(s, ini)) + talentSum(w, s, 'initiative'), heavy: (c?.armor ?? 0) >= 5, ability: c?.ability, level: s.level,
         element: wp.element, effects: Object.fromEntries(ailOf(g).debuffs.filter(d => d.until > g.day && ['curse', 'blind', 'silence', 'poison'].includes(d.kind)).map(d => [d.kind, 3])),
     };
 }
@@ -79,15 +82,18 @@ function gear(g: Save, w: WorldDef, f: Fighter): Fighter {
 }
 // A companion or sellsword: a fighter of their class, at a level, with sensible scores (their key score high).
 export function npcFighter(w: WorldDef, c: RpgClass | null, level: number, base: Pick<Fighter, 'id' | 'name' | 'who' | 'ref' | 'row'>, hp?: number): Fighter {
+    const r = rpgOf(w); const def = roleAttr(r, 'defense');
     const attrs: Record<string, number> = { str: 10, dex: 14, con: 14, int: 10, wis: 10, cha: 10 };
-    const wp = c?.weapon ?? FISTS;
+    for (const a of r?.attributes ?? []) attrs[a.id] ??= 10;
+    attrs[def] = Math.max(attrs[def] ?? 10, 14); if (r?.hpAttr) attrs[r.hpAttr] = Math.max(attrs[r.hpAttr] ?? 10, 14);
+    const wp = c?.weapon ?? fists(w);
     if (wp.attr !== c?.key) attrs[wp.attr] = Math.max(attrs[wp.attr] ?? 10, 14);
     attrs[c?.key ?? 'str'] = 16;
     const s = { cls: c?.id ?? '', level, attrs } as unknown as Sheet;
     const max = hpMax(w, s); const m = mod(attrs[wp.attr] ?? 10);
     return {
-        ...base, side: 'us', hp: Math.max(1, Math.min(max, hp ?? max)), max, ac: acOf(c?.armor ?? 0, mod(attrs.dex)), atk: prof(level) + m,
-        dice: wp.dice, sides: wp.sides, dmg: m, ranged: !!wp.ranged, weapon: wp.name, init: mod(attrs.dex), heavy: (c?.armor ?? 0) >= 5, ability: c?.ability, level, element: wp.element,
+        ...base, side: 'us', hp: Math.max(1, Math.min(max, hp ?? max)), max, ac: acOf(c?.armor ?? 0, mod(attrs[def])), atk: prof(level) + m,
+        dice: wp.dice, sides: wp.sides, dmg: m, ranged: !!wp.ranged, weapon: wp.name, init: mod(attrs[roleAttr(r, 'initiative')] ?? 10), heavy: (c?.armor ?? 0) >= 5, ability: c?.ability, level, element: wp.element,
     };
 }
 function memberFighter(g: Save, w: WorldDef, m: Member, lvl: number): Fighter {
