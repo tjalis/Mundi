@@ -8,7 +8,7 @@ import { note } from './facts.js';
 import { bump } from './social.js';
 import { breakOf } from './daylife.js';
 import { regionState, regionOf } from './worldstate.js';
-import { isRpg, sheetOf, rollCheck, checkWon, addXp, addRenown, count, gradeWord, type Check } from './rpg.js';
+import { isRpg, sheetOf, rollCheck, checkWon, addXp, addRenown, count, gradeWord, tooHurt, type Check } from './rpg.js';
 import { book } from './ledger.js';
 import { addRep } from './standing.js';
 import { pleaseBlade } from './artifacts.js';
@@ -27,7 +27,7 @@ export const quests = (g: Save): Quest[] => (((g as any).quests ??= []) as Quest
 export const activeQuests = (g: Save) => quests(g).filter(q => q.state === 'active');
 export const offeredQuests = (g: Save) => quests(g).filter(q => q.state === 'offered');
 
-const publicPlaces = (w: WorldDef, region?: string, tags?: string[]) => w.places.filter(p => !p.link && (!region || p.map === region) && (!tags || (p.tags ?? []).some(t => tags.includes(t))));
+const publicPlaces = (w: WorldDef, region?: string, tags?: string[]) => w.places.filter(p => !p.link && !p.hidden && !p.restricted && (!region || p.map === region) && (!tags || (p.tags ?? []).some(t => tags.includes(t))));
 const pick = <T>(g: Save, list: T[], salt: string) => list[Math.floor(rnd(g, salt) * list.length)];
 
 // What the world needs today (at most one new quest a day, three waiting at a time).
@@ -133,6 +133,7 @@ export function doStep(g: Save, w: WorldDef, id: string): StepResult | null {
     let check: Check | undefined;
     if (st.fight && !(q as any).won) {
         if (inCombat(g)) return { text: 'You are already fighting.', msgs };
+        { const hurt = tooHurt(g, w); if (hurt) return { text: hurt, msgs }; }
         if (q.tried === g.day) return { text: 'Not today: catch your breath and come back tomorrow.', msgs };
         const c = startCombat(g, w, { why: 'The bandits come at you:', tags: st.fight, quest: q.id });
         return { text: c ? 'To arms!' : 'There is no one to fight here.', fight: !!c, msgs };

@@ -19,7 +19,11 @@ let fails = 0, passes = 0;
 const ok = (c, m) => { if (c) passes++; else { fails++; console.log('  FAIL', m); } };
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', f), 'utf8'));
 const open = (s) => { for (const k of Object.keys(meta)) delete meta[k]; meta.mundi = s; return store.game(); };
-const rpgSave = (cls) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: 'rpg' }; const g = open(s); if (cls) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
+// fed and watered: hunger and thirst at zero now cost hit points, and death is real in the RPG
+const fed = (g) => { for (const id of ['hunger', 'thirst']) { const st = w.statuses.find(x => x.id === id); if (st) g.player.stats[id] = st.max; } return g; };
+// a day goes by, with meals (a day without them now costs hit points)
+const day = (g) => { for (let h = 0; h < 4; h++) { time.advance(g, w, 360); fed(g); } };
+const rpgSave = (cls) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: 'rpg' }; const g = fed(open(s)); if (cls) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
 seed(21);
 const w = world(ext, 'medieval'); W.registerWorld(w);
 const modern = world(ext, 'modern'); W.registerWorld(modern);
@@ -37,7 +41,7 @@ const modern = world(ext, 'modern'); W.registerWorld(modern);
     ok(g.player.stats.life === life.max, 'full hit points: full life');
     needs.addStatus(g, w, 'life', -50);
     ok(s.hp === 6 && g.player.stats.life === 50, `losing half the life is losing half the hit points (${s.hp})`);
-    R.longRest(g, w); ok(s.hp === 12, 'a long rest heals');
+    R.longRest(g, w); ok(s.hp === 9, `a long rest heals a fifth of the hit points: death is real, wounds take days (${s.hp})`);
     const msgs = R.addXp(g, w, 320, 'test');
     ok(s.level === 3 && R.pendingSubclass(w, s) && msgs.some(m => /Level 3/.test(m)), `experience: level ${s.level}, subclass to choose`);
     ok(R.hpMax(w, s) > 12, 'more hit points with levels');
@@ -103,9 +107,11 @@ const modern = world(ext, 'modern'); W.registerWorld(modern);
     const j = T.journeyOf(g, w, from, to, 14 * 60);
     ok(j && j.camps === 1, 'a long trip between regions means a night at camp');
     ok(!T.journeyOf(g, w, from, from, 60), 'a short walk is not a journey');
-    g.rpg.hp = 3; R.syncLife(g, w);
-    const msgs = T.travelRoad(g, w, 14 * 60, true);
-    ok(msgs.some(m => /🏕️/.test(m)) && g.rpg.counts.camps === 1 && g.rpg.hp > 3, 'making camp: rest, a Survival check, a count');
+    // nearly unhurt: when death is real, a day on the road with nothing to drink kills someone already hurt
+    const half = R.hpMax(w, g.rpg) - 1; g.rpg.hp = half; R.syncLife(g, w);
+    for (const st of w.statuses) if (st.id !== 'life') g.player.stats[st.id] = st.max;   // set off rested, fed and in good spirits
+    const msgs = T.travelRoad(g, w, 9 * 60, true);   // a day on the road and a night at camp
+    ok(msgs.some(m => /🏕️/.test(m)) && g.rpg.counts.camps === 1 && g.rpg.hp > 0 && !g.mortal?.dead, `making camp: rest, a Survival check, a count (${g.rpg.hp} HP)`);
 }
 // RPG bills, by the Lexicon
 {

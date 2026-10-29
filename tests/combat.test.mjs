@@ -20,7 +20,9 @@ let fails = 0, passes = 0;
 const ok = (c, m) => { if (c) passes++; else { fails++; console.log('  FAIL', m); } };
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', f), 'utf8'));
 const open = (s) => { for (const k of Object.keys(meta)) delete meta[k]; meta.mundi = s; return store.game(); };
-const rpgSave = (cls, level = 1) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: 'rpg' }; const g = open(s); g.rpg = R.makeSheet(w, { cls }); if (level > 1) R.addXp(g, w, w.rpg.xp[level - 2], 'test'); R.longRest(g, w); return g; };
+// fed and watered: when death is real (the RPG), hunger and thirst at zero cost hit points
+const fed = (g) => { for (const id of ['hunger', 'thirst']) { const st = w.statuses.find(x => x.id === id); if (st) g.player.stats[id] = st.max; } return g; };
+const rpgSave = (cls, level = 1) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: 'rpg' }; const g = fed(open(s)); g.rpg = R.makeSheet(w, { cls }); if (level > 1) R.addXp(g, w, w.rpg.xp[level - 2], 'test'); R.longRest(g, w); return g; };
 seed(6);
 const w = world(ext, 'medieval'); W.registerWorld(w);
 const people = (g) => Object.values(g.cast).filter(r => !(g.family?.kids ?? []).some(k => k.avatar === r.avatar));
@@ -58,7 +60,7 @@ const people = (g) => Object.values(g.cast).filter(r => !(g.family?.kids ?? []).
     PT.hire(g, w, list[1].id);
     ok(/at a time/.test(PT.hire(g, w, list[2].id)), 'two sellswords at a time');
     g.player.money = list[0].wage;
-    const news = time.advance(g, w, 24 * 60);
+    const news = []; for (let h = 0; h < 4; h++) { news.push(...time.advance(g, w, 6 * 60)); fed(g); }   // a day, with meals
     ok(PT.mercs(g).length === 1 && news.some(n => /could not pay/.test(n)), 'unpaid, a sellsword walks away');
 }
 // a tactical fight
@@ -158,10 +160,11 @@ const people = (g) => Object.values(g.cast).filter(r => !(g.family?.kids ?? []).
     ok(c.over && c.log.length > 3, `narrative: the engine plays out the whole fight at once (${c.over})`);
     ok(c.over === 'lost', 'three big foes beat a level 1 rogue');
     if (c.over === 'lost') {
-        ok(g.player.loc === 'healer' && g.rpg.hp > 0, 'beaten: you wake up at the healer (the world\'s rule at zero)');
-        ok(c.summary.includes('lost') && c.summary.includes('knocked out'), 'the AI is told');
+        // death is real in the RPG: with nobody to treat you in time, a lost fight is the end
+        ok(g.mortal?.dead && g.mortal.graves.some(x => x.you), 'beaten with nobody to save you: you are killed (a grave, and the death screen)');
+        ok(c.summary.includes('lost') && c.summary.includes('died'), 'the AI is told');
     }
-    ok(!PT.mercs(g).length && (c.msgs ?? []).some(x => /died/.test(x)), 'a fallen sellsword is gone for good');
+    ok(!PT.mercs(g).length && (c.msgs ?? []).some(x => /died|killed/.test(x)), 'a fallen sellsword is gone for good');
     delete g.combat;
 }
 // a fight's view for the AI and on screen

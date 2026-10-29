@@ -19,7 +19,11 @@ let fails = 0, passes = 0;
 const ok = (c, m) => { if (c) passes++; else { fails++; console.log('  FAIL', m); } };
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', f), 'utf8'));
 const open = (s) => { for (const k of Object.keys(meta)) delete meta[k]; meta.mundi = s; return store.game(); };
-const fresh = (rpg) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = open(s); if (rpg) { g.rpg = R.makeSheet(w, { cls: 'mage' }); R.syncLife(g, w); } return g; };
+// fed and watered: when death is real (the RPG), hunger and thirst at zero cost hit points
+const fed = (g) => { for (const id of ['hunger', 'thirst']) { const st = w.statuses.find(x => x.id === id); if (st) g.player.stats[id] = st.max; } return g; };
+// a day goes by, with meals
+const day = (g) => { for (let h = 0; h < 4; h++) { time.advance(g, w, 360); fed(g); } };
+const fresh = (rpg) => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = fed(open(s)); if (rpg) { g.rpg = R.makeSheet(w, { cls: 'mage' }); R.syncLife(g, w); } return g; };
 seed(8);
 const w = world(ext, 'medieval'); W.registerWorld(w);
 const act = (id) => w.actions.find(a => a.id === id);
@@ -79,7 +83,7 @@ const act = (id) => w.actions.find(a => a.id === id);
     const after = R.rollCheck(g, w, 'arcana', 10, 0, () => 0.5).bonus;
     ok(before - after === 2, `a happy familiar helps its skill (+2), a hungry one does not (${before} vs ${after})`);
     ok(/You play/.test(PT.playWithPet(g, w, PT.petsOf(g)[0].id)) && /eats/.test(PT.feedPet(g, w, PT.petsOf(g)[0].id)), 'feeding and playing');
-    for (let i = 0; i < 6; i++) time.advance(g, w, 1440);
+    for (let i = 0; i < 6; i++) day(g);
     ok(PT.petsOf(g).length < 2, 'neglected, they run away');
 }
 // apprentices

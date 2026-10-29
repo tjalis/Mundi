@@ -23,6 +23,7 @@ export interface Swap {
     homes?: Record<string, any>;
     left?: Record<string, { loc: string; until: number }>;   // where the one you stopped playing stays for a while        // each one's home (the household you are in follows who you play)
     roster?: string[];                  // the people chosen to play in this world
+    gone?: string[];                    // the dead among them (your original character: '__orig'): nobody plays them again
     origStats?: Record<string, number>; bodies?: Record<string, Record<string, number>>;   // older saves
 }
 export const swapOf = (g: Save) => ((g as any).swap ?? null) as Swap | null;
@@ -31,6 +32,9 @@ const ensure = (g: Save): Swap => ((g as any).swap ??= { avatar: '', orig: perso
 export const selfAvatar = (g: Save) => { const s = swapOf(g); return s ? (s.avatar || s.origCard || '') : ''; };
 export const roster = (g: Save): string[] => (ensure(g).roster ??= []);
 export const playing = (g: Save) => swapOf(g)?.avatar ?? '';
+/** Someone you played died (RPG, death being real): '' for your original character. */
+export function markGone(g: Save, who: string) { const s = ensure(g); (s.gone ??= []).push(who || ORIG); if (!s.avatar) { s.orig = s.orig || persona(); s.origName = s.origName || personaName(); } }
+export const isGone = (g: Save, who: string) => !!swapOf(g)?.gone?.includes(who || ORIG);
 
 /* ---------- each one's own view of the world ---------- */
 
@@ -74,6 +78,7 @@ function mirror(from: Persp, fromCard: string, to: Persp, toCard: string) {
 
 async function origCardOf(g: Save, w: WorldDef, s: Swap): Promise<string> {
     if (s.origCard && g.cast[s.origCard] && charOf(s.origCard)) return s.origCard;
+    if (s.gone?.includes(ORIG)) return '';   // dead: not a person of the world any more
     const row = personas().find(p => p.file === s.orig);
     let img: Blob | undefined;
     try { img = await (await fetch(`/User Avatars/${encodeURIComponent(s.orig)}`)).blob(); } catch { /* no picture */ }
@@ -94,6 +99,7 @@ export async function switchTo(g: Save, w: WorldDef, target: string): Promise<st
     if (!s.avatar) { s.orig = s.orig || persona(); s.origName = s.origName || personaName(); }
     const fromKey = s.avatar || ORIG, toKey = target || ORIG;
     if (fromKey === toKey) return '';
+    if (s.gone?.includes(toKey)) throw new Error('They are dead.');
     if (target && !charOf(target)) throw new Error('That character is not in SillyTavern anymore.');
     // an event or a night over ends when you leave the person you are
     const soc = (g as any).social ?? {};

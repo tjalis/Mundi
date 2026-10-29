@@ -1,0 +1,31 @@
+/* Sprites drawn on ComfyUI (ui/spritegen.ts): the button or progress under a card shown in place of a sprite. */
+#mundi-root .mu-sprite .mu-sprgen { position: absolute; left: 50%; bottom: 36vh; transform: translate(-50%, calc(100% + 8px)); z-index: 3; pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 13px; white-space: nowrap; background: color-mix(in srgb, var(--bg) 85%, transparent); border: 1px solid var(--line); color: var(--fg, #fff); box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+#mundi-root .mu-sprite button.mu-sprgen { cursor: pointer; }
+#mundi-root .mu-sprite button.mu-sprgen:hover { border-color: var(--accent); }
+#mundi-root .mu-sprite .mu-sprgen.is-busy { opacity: .9; }
+#mundi-root .mu-sprite .mu-sprgen svg { width: 15px; height: 15px; }
+#mundi-root[data-layout="classic"] .mu-sprite .mu-sprgen { bottom: 20vh; }
+#mundi-root .mu-sprsheet { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; }
+#mundi-root .mu-sprsheet summary { cursor: pointer; font-weight: 600; }
+#mundi-root .mu-sprsheet textarea { width: 100%; font-family: inherit; font-size: 13px; }
+/* The Library's Expressions page: the look and the drawing buttons above the pictures. */
+#mundi-root .mu-sprlook { margin: 10px 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 8px; }
+#mundi-root .mu-sprlook h4 { margin: 0; }
+#mundi-root .mu-sprlook textarea { width: 100%; font-family: inherit; font-size: 13px; }
+#mundi-root .mu-sprlook .mu-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#mundi-root .mu-sprlook [aria-disabled="true"] { opacity: .5; }
+#mundi-root .mu-sprgen-state { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--accent); }
+#mundi-root .mu-sprgen-state svg { width: 16px; height: 16px; }
+#mundi-root .mu-sprlabels { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 2px 10px; }
+#mundi-root .mu-sprlooks { display: flex; flex-wrap: wrap; gap: 6px; }
+/* The Library's "No sprites" filter. */
+#mundi-root .mu-lib-nospr { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+/* The Gallery's sprites: whole figures, not cropped. */
+#mundi-root .mu-gal-sprites .mu-gal-char img { object-fit: contain; background: var(--bg); }
+#mundi-root .mu-photos.is-sprites .mu-photo { aspect-ratio: 2 / 3; background: var(--bg); }
+#mundi-root .mu-photos.is-sprites .mu-photo img, #mundi-root .mu-photos.is-sprites .mu-photo canvas { object-fit: contain; }
+/* Settings › Add-ons › Sprites › Scene looks: one rule per row (on/off, its words, the outfit or condition). */
+#mundi-root .mu-lookrule { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 4px 0; }
+#mundi-root .mu-lookrule .mu-check { flex: 1 1 260px; }
+#mundi-root .mu-lookrule input[type="text"] { flex: 1 1 140px; min-width: 0; }
+#mundi-root .mu-lookrule select { flex: 0 1 140px; }

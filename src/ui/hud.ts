@@ -13,13 +13,14 @@ import { payOf, lockedOut } from '../sim/bills.js';
 //   bottom      — the dialogue box (scene.ts); bottom right: the phone, peeking up when it is closed
 import { needWord } from '../sim/life.js';
 import { lifeOverlays, soloOf } from './lifeui.js';
-import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame } from '../core/store.js';
+import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame, hostOf } from '../core/store.js';
 import { getWorld, activeStatuses, systemOn, type StatusDef, type WorldDef, deviceLook, offScreenWork, isScenario, HOME_NEEDS, homeNeedsOn } from '../core/world.js';
 import { levelChip } from './rpgui.js';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import type { Save } from '../core/store.js';
 import { personaThumb, personaName, thumb, setPrompt } from '../st/bridge.js';
 import { personaPickHtml } from './scene.js';
+import { detachHtml } from './attach.js';
 import { outingHtml } from './outing.js';
 import { residentsHtml } from './residents.js';
 import { guestDialogsHtml } from './guestsui.js';
@@ -47,11 +48,13 @@ import { openNow } from '../sim/daynight.js';
 import { questsHere, doStep } from '../sim/quests.js';
 import { weatherHere, crowdLevel, crowdWord, regionState, regionOf, moodWord, tensionWord } from '../sim/worldstate.js';
 import { chanceOf } from '../sim/dice.js';
-import { isRpg, sheetOf, focusMax, hpMax } from '../sim/rpg.js';
+import { isRpg, sheetOf, focusMax, hpMax, mortalOn } from '../sim/rpg.js';
+import { bandOf, BAND_WORD } from '../sim/wounds.js';
 import { lifeActs, festivalChip, schoolActs } from './lifeplus.js';
 import { factionActs } from './factionsui.js';
 import { holdingsActs } from './holdingsui.js';
 import { adventureActs } from './adventureui.js';
+import { discoveryActs } from './discoveryui.js';
 import { rpgOf } from '../core/rpgdef.js';
 
 /* ---------- you ---------- */
@@ -78,7 +81,7 @@ function personaCard(g: Save, w: WorldDef) {
         <button class="mh-face" data-act="pa-open" title="Play as…">${img ? `<img src="${esc(img)}" alt="">` : icon('user')}<i class="mh-face-swap">${icon('users')}</i></button>
         <div class="mh-needs">
             <div class="mh-who"><b>${esc(personaName())}</b>${levelChip()}${isScenario(w) ? '' : `<span class="mu-cash">${esc(money(w, g.player.money))}</span>`}</div>
-            ${shown.filter(isBar).map(s => `<div class="mh-bar ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(sh && (s.id === 'life' || s.id === 'health') ? `${sh.hp}/${hpMax(w, sh)} HP` : needWord(s, v(s)))}" style="--c:${esc(s.color)};--v:${v(s)}">
+            ${shown.filter(isBar).map(s => `<div class="mh-bar ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(sh && (s.id === 'life' || s.id === 'health') ? `${sh.hp}/${hpMax(w, sh)} HP${mortalOn(g, w) && bandOf(sh.hp, hpMax(w, sh)) !== 'fine' ? ` · ${BAND_WORD[bandOf(sh.hp, hpMax(w, sh))]}` : ''}${(g as any).mortal?.form ? ` · ${(g as any).mortal.form}` : ''}` : needWord(s, v(s)))}" style="--c:${esc(s.color)};--v:${v(s)}">
                 <span class="mh-bar-ic">${needIcon(s)}</span><span class="mh-bar-name">${esc(s.name)}</span><span class="mh-bar-track"><i></i></span></div>`).join('')}${focusBar}
             <div class="mh-rings">${shown.filter(s => !isBar(s)).map(s => `<div class="mh-ring ${v(s) <= 20 ? 'is-low' : ''}" data-stat="${esc(s.id)}" data-word="${esc(`${s.name}: ${needWord(s, v(s))}`)}" aria-label="${esc(s.name)}" style="--c:${esc(s.color)};--v:${v(s)}">
                 <span class="mh-ring-ic">${needIcon(s)}</span><small>${esc(s.name)}</small></div>`).join('')}</div>
@@ -144,6 +147,7 @@ function corner(g: Save, w: WorldDef) {
             ${isScenario(w) ? `<button data-act="res-open">${icon('users')}<span>Who lives here</span></button>` : ''}
             ${isScenario(w) ? `<button data-act="sc-open" data-v="persona"><span class="mh-drawer-mew"><img class="mh-drawer-me" src="${esc(personaThumb())}" alt=""></span><span>Your persona<small data-notr>${esc(personaName())}</small></span></button>` : ''}
             <button data-act="hud-look">${icon('palette')}<span>Chat look</span></button>
+            ${hostOf(g) ? `<button data-act="det-open">${icon('undo')}<span>Detach world</span></button>` : ''}
             <button data-act="open-settings">${icon('gear')}<span>Settings</span></button>
             <button data-act="to-menu" data-sfx="back">${icon('back')}<span>Main menu</span></button></nav>` : ''}
         ${lookOpen ? `<div class="mh-lookpop mh-glass" data-keep="look"><header><b>Chat look</b><button class="mu-ibtn mu-ghost" data-act="hud-look">${icon('x')}</button></header>${lookPanelHtml()}</div>` : ''}
@@ -192,6 +196,7 @@ function actsColumn(g: Save, w: WorldDef) {
         factionActs(g, w),
         holdingsActs(g, w),
         adventureActs(g, w),
+        discoveryActs(g, w),
         ...questsHere(g).map(q => `<button class="mh-act is-quest mh-glass" data-act="quest-step" data-id="${esc(q.id)}"><i>📜</i><b>${esc(q.steps[q.step].what)}</b><small>${esc(q.title)}</small></button>`),
         ...(job ? [`<button class="mh-act is-work mh-glass ${offScreenWork(w) ? 'is-outing' : ''}" data-act="work" ${isOpen(g, job) ? '' : 'aria-disabled="true"'}><i>${icon('briefcase')}</i><b>${offScreenWork(w) ? 'Go to work' : 'Work a shift'} · ${job.shift} h</b><small>${isOpen(g, job) ? `${money(w, payOf(g, job.ranks[g.player.job!.rank].pay * job.shift))}` : `Open ${String(job.hours?.[0] ?? 0).padStart(2, '0')}:00–${String(job.hours?.[1] ?? 24).padStart(2, '0')}:00`}</small></button>`] : []),
         ...jobs.map(o => `<button class="mh-act mh-glass" data-act="apply" data-id="${esc(o.id)}" ${missingCourses(g, w, o).length || triedToday(g, o.id) ? 'aria-disabled="true"' : ''}><i>${icon('briefcase')}</i><b>Apply: ${esc(o.name)}</b><small>${missingCourses(g, w, o).length ? `${lex(w, 'needsCourse')}: ${esc(missingCourses(g, w, o).join(', '))}` : `${money(w, payOf(g, o.ranks[0].pay))}/h · interview 🎲 ${interviewChance(g, o, traitsOf(g))}%`}</small></button>`),
@@ -226,7 +231,7 @@ export function hudHtml() {
     const g = game(); const w = g && getWorld(g.world);
     if (!g || !w) return '';
     // Home: no card of your own (no money, no needs); your persona is in the menu, as in a chat
-    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
+    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${detachHtml()}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
 }
 
 Object.assign(ACT, {
