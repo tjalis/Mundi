@@ -2,6 +2,7 @@ import { relOverlays, endConfirmHtml } from './relui.js';
 // Screens for the Life-Sim systems: the elevator of apartment buildings, invitations from people, the shop and
 // goals apps, throwing a party, talking with only one person, and playing as someone else.
 import { currentHappening, answer } from '../sim/happenings.js';
+import { offerHtml } from './storypeople.js';
 import { esc, game, toast, notify, saveGame, nowAbs, state, type Save } from '../core/store.js';
 import { countUp } from '../sim/skills.js';
 import { getWorld, type WorldDef } from '../core/world.js';
@@ -20,7 +21,7 @@ import { partyExtraHtml, partyCardExtra, partyCardButtons } from './guestsui.js'
 import { rememberOutingBg } from '../sim/outing.js';
 import { shopPrice, shopItems, hasItem, buy, ASPIRATIONS, aspirationOf, setAspiration, lifeOf, pendingInvite, clearInvite, activeFeelings } from '../sim/life.js';
 import { thumb, charOf, personaName, personaThumb } from '../st/bridge.js';
-import { swapOf, switchTo, roster } from '../sim/playas.js';
+import { swapOf, switchTo, roster, isGone } from '../sim/playas.js';
 import { refreshPrompt } from '../sim/prompt.js';
 import { weekday } from '../sim/time.js';
 import { fmtClock as hm } from '../core/fmt.js';
@@ -85,7 +86,7 @@ function transitionHtml() {
 export function lifeOverlays() {
     const g = game(); const w = g && getWorld(g.world);
     if (!g || !w) return '';
-    return `${elevatorHtml()}${inviteHtml(g, w) || happeningHtml(g)}${playAsHtml(g)}${transitionHtml()}${relOverlays()}${endConfirmHtml()}`;
+    return `${elevatorHtml()}${inviteHtml(g, w) || happeningHtml(g) || offerHtml(g)}${playAsHtml(g)}${transitionHtml()}${relOverlays()}${endConfirmHtml()}`;
 }
 
 /* ---------- phone apps: shop and goals ---------- */
@@ -176,7 +177,7 @@ function playAsHtml(g: Save): string {
             <input class="mu-search" type="search" placeholder="Search people" data-input="pa-q" data-focus="pa-q" value="${esc(PA.q)}">
             <div class="mu-pa-pool">${pool.map(r => `<button class="mu-chip ${roster(g).includes(r.avatar) ? 'is-on' : ''}" data-act="pa-pick" data-who="${esc(r.avatar)}"><img src="${esc(thumb(r.avatar))}" alt=""><span data-notr>${esc(r.name)}</span></button>`).join('') || '<p class="mu-muted">Nobody found.</p>'}</div>
             <footer class="mu-row"><button class="mu-primary mu-right" data-act="pa-edit">${icon('check')}<span>Done</span></button></footer></div>`
-        : `<div class="mu-pa-grid">${card('', origName, origPic, 'Your character')}${list.map(a => card(a, g.cast[a].name, thumb(a), placeOf(g, getWorld(g.world)!, whereNow(g, getWorld(g.world)!, g.cast[a]))?.name ?? '')).join('')}</div>
+        : `<div class="mu-pa-grid">${isGone(g, '') ? '' : card('', origName, origPic, 'Your character')}${list.map(a => card(a, g.cast[a].name, thumb(a), placeOf(g, getWorld(g.world)!, whereNow(g, getWorld(g.world)!, g.cast[a]))?.name ?? '')).join('')}</div>
             <p class="mu-muted mu-pa-note">You take their place and their home. The one you were stays where they are (or with you, if they were your company). Energy, needs and money stay the same; each person keeps their own relationships, diary and job.</p>
             <footer class="mu-row"><button data-act="pa-edit">${icon('edit')}<span>Choose who you can play (${list.length})</span></button><button data-act="pa-persona"><img class="mu-pa-me" src="${esc(personaThumb())}" alt=""><span>Use another persona</span></button></footer>`}
     </section></div>`;

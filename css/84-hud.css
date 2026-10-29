@@ -200,6 +200,16 @@
 #mundi-root .mh-invite > img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; object-position: top; }
 #mundi-root .mh-invite p { margin: 2px 0 0; font-size: 13px; color: var(--hud-muted); }
 #mundi-root .mh-invite-btns { grid-column: 1 / -1; display: flex; gap: 8px; }
+/* people from the story: the offer card and the list (ui/storypeople.ts) */
+#mundi-root .mu-np-face { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 22px; color: #fff; background: linear-gradient(135deg, #f59e0b, #7c3aed); }
+#mundi-root .mh-invite.is-newcomer small { color: var(--hud-muted); }
+#mundi-root .mu-np-name { width: 100%; margin-top: 8px; }
+#mundi-root .mu-np-list .mu-np-rows { overflow: auto; display: grid; gap: 8px; align-content: start; }
+#mundi-root .mu-np-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: start; padding: 10px; border-radius: 14px; background: color-mix(in srgb, var(--text) 5%, transparent); }
+#mundi-root .mu-np-row .mu-np-face { width: 44px; height: 44px; font-size: 16px; }
+#mundi-root .mu-np-row p { margin: 3px 0 0; font-size: 13px; }
+#mundi-root .mu-np-row small { display: block; }
+#mundi-root .mu-np-row.is-never, #mundi-root .mu-np-row.is-added { opacity: .65; }
 #mundi-root .mh-modal-veil { position: absolute; inset: 0; z-index: 35; display: grid; place-items: center; background: rgba(0, 0, 0, .35); }
 #mundi-root .mh-elev { width: 240px; padding: 16px; border-radius: 24px; display: grid; gap: 10px; justify-items: center; text-align: center; }
 #mundi-root .mh-elev header { display: flex; align-items: center; gap: 8px; }

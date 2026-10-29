@@ -5,7 +5,7 @@ import type { Save } from '../core/store.js';
 import { systemOn, type WorldDef, type TowerDef } from '../core/world.js';
 import { rpgOf, type Foe } from '../core/rpgdef.js';
 import { afterFight } from './hooks.js';
-import { isRpg, sheetOf } from './rpg.js';
+import { isRpg, sheetOf, tooHurt } from './rpg.js';
 import { startCombat, inCombat } from './combat.js';
 import { book } from './ledger.js';
 import { note } from './facts.js';
@@ -38,6 +38,7 @@ export function enterFloor(g: Save, w: WorldDef, id: string, fromCheckpoint = fa
     const t = w.towers?.find(x => x.id === id); if (!t || !on(w) || !sheetOf(g)) return '';
     if (g.player.loc !== t.place) return `${t.name} is elsewhere.`;
     if (inCombat(g)) return 'You are already fighting.';
+    { const hurt = tooHurt(g, w); if (hurt) return hurt; }
     const c = climbOf(g, id);
     if (fromCheckpoint) c.floor = c.checkpoint;
     const next = c.floor + 1;
