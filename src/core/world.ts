@@ -38,7 +38,19 @@ export interface Place {
     scenarioOff?: boolean;
     /** What the place is for the game (a healer, a jail, a contracts board…); none given: guessed from its name. */
     roles?: string[];
+    /** Not on the map until it is found in the story (an address someone gives you, a secret base). */
+    hidden?: boolean;
+    /** On the map but you cannot go in until it opens up; the text says who it is for ("Hunters only"). */
+    restricted?: string;
+    /** What opens it (and finds it, when hidden) by itself: every condition set must hold. */
+    opens?: PlaceOpens;
+    /** Other names the story may use for it (an address, a nickname), so finding it in the story works. */
+    aka?: string[];
+    /** A floor of a building: the place it is in (one pin on the map), and the floor's name ("Floor 3"). */
+    in?: string; floor?: string;
 }
+/** What opens a hidden or restricted place by itself. `who`: a person's name, with `bond` (0-100) or more. */
+export interface PlaceOpens { who?: string; bond?: number; faction?: string; rank?: number; level?: number; rep?: number }
 // Roles a place can have. A place with its own list uses only that list; one without is guessed from its name, so
 // older worlds keep working and any world can set them in the map editor.
 export const PLACE_ROLES: { id: string; name: string; re: RegExp }[] = [
@@ -47,6 +59,7 @@ export const PLACE_ROLES: { id: string; name: string; re: RegExp }[] = [
     { id: 'tavern', name: 'Tavern or bar (rumors and clues)', re: /tavern|inn|mead|mug|goose|dog|plough|lantern|camel|mermaid|torch|pickaxe|caf[eé]|\bbar\b|pub|club/i },
     { id: 'hire', name: 'Companions for hire', re: /tavern|inn|barrack|guild|plough|saltdog|fort|\bbar\b|pub|club/i },
     { id: 'contracts', name: 'Contracts board', re: /guild|lodge|hunter|board/i },
+    { id: 'quests', name: 'Quest board (requests for help)', re: /guild|board|notice|adventur|association|town ?hall|city ?hall|mission|request/i },
     { id: 'guarded', name: 'Guarded (wanted people are stopped)', re: /guard|barrack|police|customs|fort|station|gate|castle|palace|civic|jarl|watch|square|market|bazaar/i },
     { id: 'jail', name: 'Jail', re: /barrack|fort|castle|jarl|palace|civic|police|guard/i },
     { id: 'blackmarket', name: 'Black market (night auctions)', re: /dock|bazaar|warehouse|black|underground|industrial/i },
@@ -91,7 +104,8 @@ export interface ActionDef {
 }
 export interface RollOutcome { text: string; money?: number; effects?: Record<string, number> }
 export interface Attribute { id: string; name: string; desc?: string }
-export interface TraitGroup { id: string; label: string; max: number; options: string[] }
+/** `max`: how many a player may pick (none, or 0: no limit). */
+export interface TraitGroup { id: string; label: string; max?: number; options: string[] }
 export interface Origin {
     id: string; name: string; desc?: string; money: number; home?: string; knows?: number;
     attributes?: Record<string, number>;
@@ -164,6 +178,8 @@ export interface WorldDef {
     /** One currency per world. `after`: the symbol goes after the amount ("40 g" instead of "$40").
      *  (`tiers`, coins of several metals, is no longer used: amounts were always counted in the smallest coin.) */
     currency: { name: string; symbol: string; after?: boolean; tiers?: { symbol: string; value: number }[] };
+    /** How many of this world's money one of its style's (a world in won: about 1300), so new prices fit (worlds built from lorebooks). */
+    moneyScale?: number;
     /** The style it is built on (modern, medieval…): the look of the game and the base the world creator copies. */
     style?: string;
     /** The game mode: Life-Sim (daily life, the base), RPG (adds health, and later factions, missions and fights)
@@ -200,7 +216,7 @@ export interface WorldDef {
         age?: { min: number; max: number; default: number };
         appearance?: { id: string; label: string; options: string[] }[];
         attributes?: { points: number; min: number; max: number; list: Attribute[] };
-        /** Ready-made descriptions the player picks (e.g. Proficiency: strong, smart), up to `max` each. */
+        /** Ready-made descriptions the player picks (e.g. Proficiency: strong, smart), up to `max` each if set. */
         traits?: TraitGroup[];
         /** What the player chooses when making a character (each one on unless set to false). */
         ask?: { portrait?: boolean; age?: boolean; appearance?: boolean; origin?: boolean; traits?: boolean; bio?: boolean };
@@ -229,6 +245,8 @@ export interface WorldDef {
     recipes?: RecipeDef[];
     /** Endless towers (a place; floors of foes that grow stronger, loot, checkpoints). */
     towers?: TowerDef[];
+    /** Gates (RPG): portals that open at random places, with a rank and floors of foes; left alone, they break. */
+    gates?: GatesDef;
     /** Weapons with a will of their own (found deep in towers or at auctions). */
     blades?: BladeDef[];
     /** Goods that are bought and sold (prices differ by town: cheap where made, dear where scarce; some illegal). */
@@ -334,7 +352,7 @@ export const activeStatuses = (w: WorldDef, g?: unknown) => (isScenario(w) && g 
 // the phone or journal, the AI's prompt, and the engine stops running it. What the save holds for it is kept, so
 // turning it back on picks up where it was. `apps`: the apps it owns; `blocks`: the prompt blocks it owns.
 export type SystemId = 'living' | 'neighbors' | 'consults' | 'needs' | 'jobs' | 'bills' | 'courses' | 'shop' | 'breakdowns' | 'plans' | 'romance' | 'family' | 'social' | 'rumors' | 'diary' | 'goals'
-    | 'habits' | 'reputation' | 'identity' | 'pets' | 'mentors' | 'letters' | 'festivals' | 'factions' | 'faith' | 'legends' | 'talents' | 'institutions' | 'trade' | 'property' | 'banks' | 'farming' | 'auctions' | 'taxes' | 'skies' | 'ecology' | 'debuffs' | 'injuries' | 'fatigue' | 'elements' | 'mounts' | 'prison' | 'towers' | 'sentient' | 'crafting' | 'trophies' | 'contracts' | 'soulbound' | 'dice' | 'pins' | 'events' | 'hobbies';
+    | 'habits' | 'reputation' | 'identity' | 'pets' | 'mentors' | 'letters' | 'festivals' | 'factions' | 'faith' | 'legends' | 'talents' | 'institutions' | 'trade' | 'property' | 'banks' | 'farming' | 'auctions' | 'taxes' | 'skies' | 'ecology' | 'debuffs' | 'injuries' | 'fatigue' | 'elements' | 'mounts' | 'prison' | 'towers' | 'gates' | 'sentient' | 'crafting' | 'trophies' | 'contracts' | 'soulbound' | 'dice' | 'pins' | 'events' | 'hobbies';
 export interface HabitDef { id: string; name: string; desc?: string; trait: string; actions?: string[]; tags?: string[]; hours?: [number, number]; count: number; days: number; lose?: number; daily?: Record<string, number> }
 export interface CityEventDef {
     id: string; name: string; icon?: string; desc?: string; place: string;
@@ -356,8 +374,12 @@ export interface PlanRoom { id: string; floor: string; x: number; y: number; w: 
 export interface HousePlan { on?: boolean; floors: PlanFloor[]; rooms: PlanRoom[]; /** the color a room lights up with under the mouse */ glow?: string; /** false: names only under the mouse */ labels?: boolean }
 export interface HobbyDef { id: string; name: string; icon?: string; desc?: string; actions: string[]; /** extra pay per level, in % (default 12) */ pay?: number }
 export interface FestivalDef { id: string; name: string; season: string; day: number; days?: number; place?: string; prices?: number; mood?: number; desc?: string }
-export interface GoodDef { id: string; name: string; icon: string; price: number; kind?: string; cheap?: string[]; dear?: string[]; illegal?: boolean; socket?: { slot: 'weapon' | 'armor'; kind: 'attack' | 'damage' | 'armor'; amount: number }; cures?: boolean }
+export interface GoodDef { id: string; name: string; icon: string; price: number; kind?: string; cheap?: string[]; dear?: string[]; illegal?: boolean; socket?: { slot: 'weapon' | 'armor'; kind: 'attack' | 'damage' | 'armor'; amount: number }; cures?: boolean;
+    /** brings someone back from death (RPG): 'self' works on its own when you die (a phoenix feather); 'helper' needs someone at your side to use it (a defibrillator) */
+    revive?: 'self' | 'helper' }
 export interface RecipeDef { id: string; name: string; needs: Record<string, number>; makes: string; count?: number; skill?: string; dc?: number; at?: string[]; risky?: boolean; legendary?: boolean }
+/** Gates: what they are called in this world ("Gate", "Rift", "Dungeon") and how often a new one opens (days). */
+export interface GatesDef { name?: string; every?: number }
 export interface TowerDef { id: string; name: string; place: string; floors: number; tags?: string[]; desc?: string }
 export interface BladeDef { id: string; name: string; personality: string; likes: 'fights' | 'quests' | 'gold' | 'mercy'; bonus: number; desc?: string }
 export interface CropDef { id: string; name: string; icon: string; days: number; seed: number; good: string; yield: number }
@@ -437,6 +459,7 @@ export const SYSTEMS: SystemDef[] = [
     { id: 'mounts', name: 'Mounts', desc: 'no horses or other mounts to ride.', apps: [], blocks: [] },
     { id: 'prison', name: 'Crime and prison', desc: 'no stealing, arrests or prison.', apps: [], blocks: [] },
     { id: 'towers', name: 'Towers', desc: 'no endless towers to climb.', apps: ['tower'], blocks: [], tag: 'rpg' },
+    { id: 'gates', name: 'Gates', desc: 'no gates or dungeons open around the map (and none break).', apps: [], blocks: [], tag: 'rpg' },
     { id: 'sentient', name: 'Sentient weapons', desc: 'no weapons with a will of their own.', apps: ['blade'], blocks: [], tag: 'fantasy' },
     { id: 'crafting', name: 'Crafting and gems', desc: 'nothing to craft, no gems to set.', apps: ['workshop'], blocks: [] },
     { id: 'trophies', name: 'Trophies', desc: 'no trophies from great foes.', apps: ['trophies'], blocks: [] },

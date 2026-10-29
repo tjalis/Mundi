@@ -13,6 +13,7 @@ import { romanceButtons } from './relui.js';
 import { outfitOf, wearOutfit, charOf } from '../st/bridge.js';
 import { outfitsOf, outfitLabel } from './outfits.js';
 import { guestButtons } from './guestsui.js';
+import { spriteMenuButtons } from './spritegen.js';
 
 export const RAD = { who: '' };
 
@@ -49,7 +50,7 @@ const arc = (items: string[], side: 'l' | 'r') => {
 export function radialHtml(avatar: string, r: Resident | null): string {
     if (RAD.who !== avatar) return '';
     const g = game(); const w = g && getWorld(g.world); if (!g || !w) return '';
-    const right = r ? actions(g, w, r) : [], left = outfits(avatar);
+    const right = r ? actions(g, w, r) : [], left = [...outfits(avatar), ...spriteMenuButtons(avatar)];
     if (!right.length && !left.length) return '';
     return `<div class="mu-radial" role="menu" aria-label="${esc(r?.name ?? String(charOf(avatar)?.name ?? ''))}">
         <div class="mu-rad-side is-left">${arc(left, 'l')}</div><div class="mu-rad-side is-right">${arc(right, 'r')}</div></div>`;

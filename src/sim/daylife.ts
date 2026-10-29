@@ -30,12 +30,13 @@ export function breakOf(g: Save, w: WorldDef, r: Resident, day: number): Break |
     const tense = regionState(g, w, regionOf(g, w, homeOf(r))).tension >= 60;
     const key = `${w.id}|${day}|${r.avatar}|${homeOf(r)}|${r.occupation}|${tense}`;
     let m = memo.get(g); if (!m) memo.set(g, m = new Map());
-    if (m.has(key)) return m.get(key)!;
-    const b = work(g, w, r, day, tense);
-    if (m.size > 5000) m.clear();
-    m.set(key, b);
-    return b;
+    // sick and waiting for the medicine you went to get (sim/quests.ts): in bed until it comes; brought: up again
+    if (waitsForMedicine(g, r.avatar)) return { kind: 'sick', from: day * 1440, to: day * 1440 + 1440, place: homeOf(r), why: 'is home sick, waiting for medicine' };
+    const b = m.has(key) ? m.get(key)! : work(g, w, r, day, tense);
+    if (!m.has(key)) { if (m.size > 5000) m.clear(); m.set(key, b); }
+    return b?.kind === 'sick' && (g as any).cured?.[r.avatar] === day ? null : b;
 }
+const waitsForMedicine = (g: Save, a: string) => ((g as any).quests ?? []).some((q: any) => q.kind === 'medicine' && (q.target ?? q.giver) === a && q.state === 'active');
 function work(g: Save, w: WorldDef, r: Resident, day: number, tense: boolean): Break | null {
     const k = `${g.world}|${day}|${r.avatar}`;
     const roll = H(`${k}|brk`), at = (h: number) => day * 1440 + h * 60;

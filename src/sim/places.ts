@@ -1,6 +1,6 @@
 // Places: the world's public places plus homes (the player's and each resident's). Distances and travel time.
 import { travelFactor } from './life.js';
-import { cfg, type Save } from '../core/store.js';
+import { cfg, nowAbs, type Save } from '../core/store.js';
 import { isScenario, type WorldDef, type Place } from '../core/world.js';
 
 export const playerHomeId = 'home:player';
@@ -40,8 +40,39 @@ export function placeOf(g: Save, w: WorldDef, id: string): (Place & { home?: boo
         return { id, name: `${label}'s home`, map: zone?.map ?? w.maps[0].id, x: r.home.x, y: r.home.y, tags: ['home'], desc: `${homeAddress(w, r.home)}: ${zone?.desc ?? ''}`, home: true, owner: r.avatar };
     }
     if (isOuting(id)) return { id, name: outingName(id), map: w.maps[0]?.id ?? '', x: 50, y: 50, tags: ['outing'], desc: `out of the house: ${outingName(id)}` };
-    return w.places.find(p => p.id === id) ?? extraRooms(g).find(p => p.id === id) ?? null;
+    return w.places.find(p => p.id === id) ?? extraRooms(g).find(p => p.id === id) ?? addedPlaces(g).find(p => p.id === id) ?? null;
 }
+/* ---------- places found, opened or added in this game (they live in the save, so each playthrough finds its own) ---------- */
+const found = (g: Save | null | undefined): { found?: string[]; open?: string[]; added?: Place[] } => (g as any)?.discovery ?? {};
+/** Places this game added: found in the story ("a place we just found"), and gates. */
+export const addedPlaces = (g: Save | null | undefined): Place[] => found(g).added ?? [];
+/** Hidden and not found yet in this game (the floors of a hidden building are hidden with it). */
+export function hiddenNow(g: Save | null | undefined, w: WorldDef, p: Place): boolean {
+    const seen = found(g).found ?? [];
+    if (p.hidden && !seen.includes(p.id)) return true;
+    const b = p.in ? w.places.find(x => x.id === p.in) : null;
+    return !!b && b.id !== p.id && !!b.hidden && !seen.includes(b.id);
+}
+/** Why you cannot go in ('' when you can): restricted and not opened in this game, or in a building that is. */
+export function lockedNow(g: Save | null | undefined, w: WorldDef, p: Place): string {
+    const open = found(g).open ?? [];
+    // let in for this visit (knocked, or sneaked in: sim/moreacts.ts), until you leave or the hours run out
+    const guest = (g as any)?.discovery?.guest as { id: string; until: number } | undefined;
+    if (guest && g && guest.until > nowAbs(g) && (guest.id === p.id || guest.id === p.in)) return '';
+    if (p.restricted && !open.includes(p.id)) return p.restricted;
+    const b = p.in ? w.places.find(x => x.id === p.in) : null;
+    return b && b.id !== p.id && b.restricted && !open.includes(b.id) ? b.restricted : '';
+}
+/** The floors of a building that this game knows of (in the world's order). */
+export const floorsOf = (g: Save, w: WorldDef, id: string): Place[] => [...w.places, ...addedPlaces(g)].filter(p => p.in === id && p.id !== id && !hiddenNow(g, w, p));
+/** The building a place is part of: its own id when it has floors, the building's for a floor, else ''. */
+export function buildingOf(g: Save, w: WorldDef, id: string): string {
+    const p = placeOf(g, w, id);
+    if (p?.in && placeOf(g, w, p.in)) return p.in;
+    return p && floorsOf(g, w, id).length ? id : '';
+}
+/** "Floor 4 · Infirmary": a floor's name with its floor (just the name for any other place). */
+export const floorName = (p: Place) => (p.floor && p.in ? `${p.floor} · ${p.name}` : p.name);
 /** Home: a place out of the house, named by the player ("out:the beach"). Going out, or a plan made somewhere out. */
 export const OUTING = 'out:';
 export const isOuting = (id: string | null | undefined) => !!id && id.startsWith(OUTING);
@@ -61,7 +92,7 @@ export const roomsOn = (g: Save | null | undefined, w: WorldDef): string[] => {
 };
 export const placeOn = (g: Save | null | undefined, w: WorldDef, id: string) => !isScenario(w) || !w.places.some(p => p.id === id) || roomsOn(g, w).includes(id);
 export function pins(g: Save, w: WorldDef) {
-    const out: (Place & { home?: boolean; owner?: string })[] = [...w.places.filter(p => placeOn(g, w, p.id)), ...(isScenario(w) ? extraRooms(g) : [])];
+    const out: (Place & { home?: boolean; owner?: string })[] = [...w.places.filter(p => placeOn(g, w, p.id) && !hiddenNow(g, w, p)), ...(isScenario(w) ? extraRooms(g) : addedPlaces(g))];
     const mine = placeOf(g, w, playerHomeId);
     if (mine) out.push(mine);
     // (a guest with no bedroom of their own, zone '__guest', has no room to show)
@@ -90,6 +121,8 @@ export function travelMinutes(g: Save, w: WorldDef, from: string, to: string): n
     if (from === to) return 0;
     if (isScenario(w)) return 0;   // Home: from one room to another takes no time
     const a = placeOf(g, w, from), b = placeOf(g, w, to);
+    // up or down the stairs of one building: a few minutes, not a trip
+    if (a && b && (a.in === b.id || b.in === a.id || (!!a.in && a.in === b.in))) return 5;
     const isRegion = (mapId?: string) => !!mapId && w.maps.some(m => m.parent === mapId) && !w.maps.find(m => m.id === mapId)?.town;
     const local = !!a && !!b && a.map === b.map && !isRegion(a.map);
     // districts and nearby villages: their own trip time to the town they hang from (siblings: the longer of the two)

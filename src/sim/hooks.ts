@@ -18,3 +18,5 @@ export const closedByEvents: ((g: Save, w: WorldDef, placeId: string) => boolean
 export const afterFight: ((g: Save, w: WorldDef, c: any) => string[])[] = [];
 // Every d20 check that is rolled (the screen can show the die).
 export const onRoll: ((c: { skill: string; d20: number; other?: number; total: number; dc: number; grade: string }) => void)[] = [];
+// Hit points went down (RPG): falling unconscious or dying is handled where the rules of death live (sim/mortal.ts).
+export const onHurt: ((g: Save, w: WorldDef) => void)[] = [];
