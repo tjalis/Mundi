@@ -6,7 +6,7 @@ import type { Save } from '../core/store.js';
 import { systemOn, placeIs, type WorldDef } from '../core/world.js';
 import { rpgOf } from '../core/rpgdef.js';
 import { onDay, afterFight } from './hooks.js';
-import { isRpg, sheetOf, rollCheck, checkWon, addXp, addRenown } from './rpg.js';
+import { isRpg, sheetOf, rollCheck, checkWon, addXp, addRenown, tooHurt } from './rpg.js';
 import { startCombat, inCombat } from './combat.js';
 import { placeOf } from './places.js';
 import { book } from './ledger.js';
@@ -60,6 +60,7 @@ export function track(g: Save, w: WorldDef, id: string): string {
     if (c.clues < CLUES) return `You need ${CLUES - c.clues} more clue(s).`;
     if (placeOf(g, w, g.player.loc)?.map !== c.region && w.maps.find(m => m.id === c.region)?.parent !== placeOf(g, w, g.player.loc)?.map) return `It roams around ${w.maps.find(m => m.id === c.region)?.name}.`;
     if (inCombat(g)) return '';
+    { const hurt = tooHurt(g, w); if (hurt) return hurt; }
     if (c.tracked === g.day) return 'The trail went cold today. Try tomorrow.';
     c.tracked = g.day;
     const ck = rollCheck(g, w, 'survival', c.legendary ? 15 : 12);

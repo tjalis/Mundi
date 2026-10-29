@@ -19,7 +19,11 @@ let fails = 0, passes = 0;
 const ok = (c, m) => { if (c) passes++; else { fails++; console.log('  FAIL', m); } };
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', f), 'utf8'));
 const open = (s) => { for (const k of Object.keys(meta)) delete meta[k]; meta.mundi = s; return store.game(); };
-const fresh = (rpg, cls = 'fighter') => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = open(s); if (rpg) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
+// fed and watered: when death is real (the RPG), hunger and thirst at zero cost hit points
+const fed = (g) => { for (const id of ['hunger', 'thirst']) { const st = w.statuses.find(x => x.id === id); if (st) g.player.stats[id] = st.max; } return g; };
+// a day goes by, with meals
+const day = (g) => { for (let h = 0; h < 4; h++) { time.advance(g, w, 360); fed(g); } };
+const fresh = (rpg, cls = 'fighter') => { const s = fixture('v0.1.0-medieval.json'); s.schema = 1; s.cfg = { ...(s.cfg ?? {}), mode: rpg ? 'rpg' : 'lifesim' }; const g = fed(open(s)); if (rpg) { g.rpg = R.makeSheet(w, { cls }); R.syncLife(g, w); } return g; };
 seed(20);
 const w = world(ext, 'medieval'); W.registerWorld(w);
 
@@ -94,10 +98,10 @@ const w = world(ext, 'medieval'); W.registerWorld(w);
     ok(/at most/.test(HD.borrow(g, w, 'bank', 5000)), 'the bank lends against what you own');
     ok(/borrow 100/.test(HD.borrow(g, w, 'bank', 100)) && g.player.money === 100, 'a bank loan');
     ok(/borrow 200/.test(HD.borrow(g, w, 'shark', 200)), 'a moneylender lends anyone');
-    for (let i = 0; i < 8; i++) time.advance(g, w, 1440);
+    for (let i = 0; i < 8; i++) day(g);
     ok(HD.holdingsOf(g).loans.find(l => l.lender === 'shark').owed > 200, 'interest grows every week');
     let thugs = false;
-    for (let i = 0; i < 20 && !thugs; i++) { time.advance(g, w, 1440); thugs = C.inCombat(g); if (thugs) break; }
+    for (let i = 0; i < 20 && !thugs; i++) { day(g); thugs = C.inCombat(g); if (thugs) break; }
     ok(thugs, 'late with the moneylender: thugs come to collect');
     delete g.combat;
 }
@@ -130,7 +134,7 @@ const w = world(ext, 'medieval'); W.registerWorld(w);
     ok(SK.ecoIn(g, 'kingdom').predators < before, 'hunting wolves thins out the predators');
     e.predators = 5;
     const venison = E.goodDef(w, 'venison'); const p0 = E.priceOf(g, w, venison, 'square');
-    for (let i = 0; i < 21; i++) time.advance(g, w, 1440);
+    for (let i = 0; i < 21; i++) day(g);
     ok(SK.ecoIn(g, 'kingdom').prey > 50, 'with few predators the prey grows');
     ok(E.priceOf(g, w, venison, 'square') !== p0, 'and meat prices follow');
     delete g.combat;

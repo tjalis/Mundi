@@ -14,6 +14,69 @@ import { applyGameLore } from './sim/lore.js';
 // A reply that came back empty (the prompt did not fit the model's context, or the reply ran out of tokens while the
 // model was still thinking) is removed, so it does not pile up in the story, and Mundi says why.
 let emptyWarned = 0;
+// After a reply: a hidden or restricted place named in the story — did {{user}} just find it, or get let in?
+async function storyPlaces() {
+    const { game, saveGame, toast } = await import('./core/store.js');
+    const { getWorld } = await import('./core/world.js');
+    const g = game(); const w = g && getWorld(g.world);
+    if (!g || !w) return;
+    try {
+        const found = await (await import('./sim/discovery.js')).storyCheck(g, w);
+        if (!found.length || game() !== g) return;
+        found.forEach(m => toast(m, 'success'));
+        saveGame(); (await import('./sim/prompt.js')).refreshPrompt();
+        const { state, notify } = await import('./core/store.js'); if (state.open) notify();
+    } catch { /* the judge is offline: the places stay as they are */ }
+}
+// After a reply: did anyone in the scene change clothes, or get wet, muddy, hurt…? (sim/looks.ts) And did the story
+// bring in someone new, or a moment with someone it brought in before? (sim/newcomers.ts) One AI call for both.
+async function storyLooks() {
+    const { game, saveGame, state, notify } = await import('./core/store.js');
+    const { getWorld } = await import('./core/world.js');
+    const g = game(); const w = g && getWorld(g.world);
+    if (!g || !w) return;
+    try {
+        const { outfitsOf } = await import('./ui/outfits.js');
+        const r = await (await import('./sim/newcomers.js')).storyAfterReply(g, w, a => outfitsOf(a) ?? []);
+        if ((!r.looks && !r.people.length) || game() !== g) return;
+        saveGame();
+        if (r.looks) await (await import('./sim/game.js')).syncScene();   // the new look goes on (or is drawn)
+        if (r.people.length) await (await import('./ui/storypeople.js')).autoAdd(g, w);   // or the card offers them
+        if (state.open) notify();
+    } catch { /* the AI is offline: the looks stay as they are */ }
+}
+// RPG, death being real: what the story did to you and your companions costs hit points
+async function storyHarm() {
+    const { game, saveGame, state, notify, toast } = await import('./core/store.js');
+    const { getWorld } = await import('./core/world.js');
+    const g = game(); const w = g && getWorld(g.world);
+    if (!g || !w) return;
+    try {
+        const lines = await (await import('./sim/storyharm.js')).storyHarm(g, w);
+        if (!lines.length || game() !== g) return;
+        saveGame();
+        (await import('./sim/prompt.js')).refreshPrompt();
+        toast(lines.join(' '), 'warn');
+        if (state.open) notify();
+    } catch { /* the AI is offline: nothing is counted */ }
+}
+// RPG: quests in the story (someone asked for help, a step done) and in the lorebooks (sim/lorequests.ts)
+async function storyQuests() {
+    const { game, saveGame, state, notify, toast } = await import('./core/store.js');
+    const { getWorld } = await import('./core/world.js');
+    const g = game(); const w = g && getWorld(g.world);
+    if (!g || !w) return;
+    try {
+        const lines = await (await import('./sim/lorequests.js')).questsAfterReply(g, w);
+        if (!lines.length || game() !== g) return;
+        saveGame();
+        (await import('./sim/prompt.js')).refreshPrompt();
+        lines.forEach(m => toast(m, 'success'));
+        if (state.open) notify();
+    } catch { /* the AI is offline: the quests stay as they are */ }
+}
+// The checks after a reply ask the AI one at a time (their own calls end a generation too, and queue behind).
+let afterReply: Promise<void> = Promise.resolve();
 function emptyReply() {
     if (!state.open) return;
     const list = chat(); const m = list.at(-1);
@@ -44,6 +107,15 @@ function addLauncher() {
         item.className = 'list-group-item flex-container flexGap5';
         item.innerHTML = '<div class="fa-solid fa-earth-americas extensionsMenuExtensionButton"></div><span>Mundi</span>';
         item.addEventListener('click', () => openApp());
+        menu.appendChild(item);
+    }
+    // a world for the chat open now, straight from SillyTavern's own chat
+    if (menu && !document.getElementById('mundi-attach')) {
+        const item = document.createElement('div');
+        item.id = 'mundi-attach';
+        item.className = 'list-group-item flex-container flexGap5';
+        item.innerHTML = '<div class="fa-solid fa-globe extensionsMenuExtensionButton"></div><span>Mundi: attach a world to this chat</span>';
+        item.addEventListener('click', () => { openApp(); void import('./ui/attach.js').then(m => m.openAttach()); });
         menu.appendChild(item);
     }
 }
@@ -82,7 +154,7 @@ function follow() {
         }
         redraw();
     };
-    on('GENERATION_ENDED', () => { emptyReply(); done(); void import('./ui/relui.js').then(m => m.checkAsk()); void import('./ui/events.js').then(m => m.checkEventEnd()); });
+    on('GENERATION_ENDED', () => { emptyReply(); done(); void import('./ui/relui.js').then(m => m.checkAsk()); void import('./ui/events.js').then(m => m.checkEventEnd()); afterReply = afterReply.then(storyPlaces).then(storyLooks).then(storyHarm).then(storyQuests).catch(() => {}); });
     on('GENERATION_STOPPED', done);
     on('GROUP_WRAPPER_FINISHED', done);
     on('STREAM_TOKEN_RECEIVED', () => { if (state.open && state.view === 'scene') patchLastLine(); });
@@ -109,7 +181,8 @@ function follow() {
         // "Continue" opens what was last played in Mundi: a world save or a scenario chat
         if (state.open) {
             const ref = openChatRef();
-            if (ref && game() && ref.group) settings().last = { kind: 'world', group: ref.group, chatId: ref.chatId };
+            if (ref && game() && (settings().attached ?? []).some(e => e.chatId === ref.chatId)) settings().last = { kind: 'world', attached: true, group: ref.group, avatar: ref.avatar, chatId: ref.chatId };
+            else if (ref && game() && ref.group) settings().last = { kind: 'world', group: ref.group, chatId: ref.chatId };
             else if (ref && scenarioOpen()) settings().last = { kind: 'chat', ...ref };
             saveSettings();
         }

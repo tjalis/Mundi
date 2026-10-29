@@ -67,7 +67,7 @@ export function billAmount(g: Save, w: WorldDef, id: BillId): number {
     const kind = g.player.home.kind ?? zone?.kind ?? '';
     const own = (w.homes.kinds[kind]?.bills ?? {}) as Record<string, number>;
     // older medieval worlds call their Power bill "firewood"
-    const base = id === 'rent' ? zone?.rent ?? 0 : Number(own[id] ?? (id === 'power' ? own.firewood : undefined) ?? 0);
+    const base = id === 'rent' ? (g.player.home.in ? 0 : zone?.rent ?? 0) : Number(own[id] ?? (id === 'power' ? own.firewood : undefined) ?? 0);
     return priceOf(g, base);
 }
 // How many weeks are owed (0 = paid up), whether it is due, and whether it was cut off (a week overdue).

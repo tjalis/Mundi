@@ -14,6 +14,7 @@ import { career, systemOn, getWorld, type WorldDef, type Occupation, type Branch
 import { advance, hour } from './time.js';
 import { addStatus, money } from './needs.js';
 import { book } from './ledger.js';
+import { tooHurt } from './rpg.js';
 export { ledger, book } from './ledger.js';
 
 export const jobDef = (w: WorldDef, id?: string | null) => w.occupations.find(o => o.id === id) ?? null;
@@ -130,6 +131,8 @@ export const WORK_MODES: { id: WorkMode; name: string; desc: string; icon: strin
 export function workShift(g: Save, w: WorldDef, mode: WorkMode = 'normal', hours?: number): string[] {
     const j = g.player.job; const o = jobDef(w, j?.id);
     if (!j || !o) return [];
+    { const hurt = tooHurt(g, w); if (hurt) return [hurt]; }
+    if ((g as any).mortal?.form === 'ghost') return ['You are a ghost: your hands pass through the work.'];
     const h = Math.max(1, Math.min(o.shift, Math.round(hours ?? o.shift)));
     const part = h / o.shift;
     const out = advance(g, w, h * 60);
