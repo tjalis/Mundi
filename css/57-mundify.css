@@ -1,0 +1,12 @@
+/* Mundify: the mark on mundified copies (list, grid, card), the "Mundified" filter and the card's Mundify strip. */
+#mundi-root { --mfy: #b48cff; }
+#mundi-root .mu-lib-item .mu-mfymark { display: grid; margin-left: auto; color: var(--mfy); }
+#mundi-root .mu-lib-item .mu-mfymark + .mu-crownmark, #mundi-root .mu-lib-item .mu-mfymark + .mu-fav { margin-left: 4px; }
+#mundi-root .mu-lib-item .mu-mfymark .mu-ic { width: 15px; height: 15px; }
+#mundi-root .mu-lib-list.is-grid .mu-mfymark { position: absolute; top: 12px; left: 12px; margin: 0; padding: 4px; border-radius: 50%; background: var(--panel); }
+#mundi-root .mu-mfybtn.is-on { color: var(--mfy); border-color: var(--mfy); }
+#mundi-root .mu-tag.is-mfy { background: color-mix(in srgb, var(--mfy) 22%, transparent); border-color: color-mix(in srgb, var(--mfy) 60%, transparent); }
+#mundi-root .mu-mfy .mu-row { flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+#mundi-root .mu-mfy small .mu-ic { width: 13px; height: 13px; vertical-align: -2px; color: var(--mfy); }
+#mundi-root .mu-mfy small button { display: inline-flex; padding: 0 6px; min-height: 0; vertical-align: baseline; }
+#mundi-root .mu-lib-list.is-grid .mu-pick ~ .mu-mfymark { top: 44px; }

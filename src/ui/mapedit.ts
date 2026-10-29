@@ -9,11 +9,12 @@ import { bgHead, bgGrid, bgHref } from './bgpick.js';
 import { uploadWorldPicture, imageRatio, newId } from '../sim/creator.js';
 import { closedOf } from '../sim/daynight.js';
 import { pickFile } from './cropper.js';
+import { drawIntoMap, paintBackground, canDrawInto, DRAWN } from './worldpaint.js';
 import { icon } from './icons.js';
 import { ACT, INPUT } from './reg.js';
 import { CW, W, txt, area, sel, num, chk } from './creator.js';
 
-export const ME = { map: '', mode: 'move' as 'move' | 'place' | 'link' | 'homes', zone: '', pin: '', zoom: 1, bgPick: false, bgq: '', bgs: null as string[] | null, bgPeriod: '' };
+export const ME = { map: '', mode: 'move' as 'move' | 'place' | 'link' | 'homes', zone: '', pin: '', zoom: 1, bgPick: false, bgq: '', bgs: null as string[] | null, bgPeriod: '', busy: '' as '' | 'draw' | 'bg' };
 const TAGS = ['leisure', 'food', 'shop', 'work', 'study', 'service', 'health'];
 const TAG_NAMES: Record<string, string> = { leisure: 'Leisure', food: 'Food', shop: 'Shopping', work: 'Work', study: 'Study', service: 'Services', health: 'Health' };
 
@@ -29,12 +30,19 @@ const placeIdx = (w: WorldDef, id: string) => w.places.findIndex(p => p.id === i
 function pinHtml(w: WorldDef, p: Place) {
     const target = p.link ? w.maps.find(m => m.id === p.link) : null;
     return `<div class="mu-me-pin ${p.link ? 'is-link' : ''} ${ME.pin === p.id ? 'is-sel' : ''}" data-pin="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%">
-        <span class="dot">${p.link ? icon('map') : ''}</span><span class="label">${esc(p.name)}${target ? ` → ${esc(target.name)}` : ''}</span></div>`;
+        <span class="dot">${p.link ? icon('map') : p.hidden || p.restricted ? icon('lock') : ''}</span><span class="label">${esc(p.name)}${target ? ` → ${esc(target.name)}` : ''}${p.in ? ` (${esc(p.floor || 'a floor')} of ${esc(w.places.find(b => b.id === p.in)?.name ?? '?')})` : ''}</span></div>`;
 }
 function homesHtml(w: WorldDef, m: MapDef) {
     return w.homes.zones.filter(z => z.map === m.id).map(z => z.spots.map((s, k) => `<div class="mu-me-home ${ME.mode === 'homes' && z.id === ME.zone ? 'is-zone' : ''}" data-zone="${esc(z.id)}" data-k="${esc(k)}" style="left:${s[0]}%;top:${s[1]}%" title="${esc(z.name)} · ${k + 1}">${k + 1}</div>`).join('')).join('');
 }
 
+// "Draw into the map": ComfyUI repaints the square round the pin so the place stands on the picture (and Undo).
+function drawRow(w: WorldDef, p: Place): string {
+    const m = w.maps.find(x => x.id === p.map);
+    if (!canDrawInto(m)) return '';
+    return `<div class="mu-field"><span>On the map picture</span><div class="mu-row"><button data-act="me-draw" ${ME.busy ? 'aria-disabled="true"' : ''}>${icon('image')}<span>${ME.busy === 'draw' ? 'Drawing…' : 'Draw it into the map'}</span></button>${DRAWN[m!.id] && !ME.busy ? `<button class="mu-ghost" data-act="me-draw-undo" title="Put back the map picture as it was before">${icon('x')}<span>Undo</span></button>` : ''}</div>
+        <small class="mu-muted">Your ComfyUI repaints the area round the pin with ${p.link ? 'the place' : 'a building'} for it; the rest of the map stays as it is.</small></div>`;
+}
 function placeForm(w: WorldDef): string {
     const i = placeIdx(w, ME.pin);
     if (i < 0) return `<p class="mu-muted">${ME.mode === 'place' ? 'Click on the map to add a place.' : ME.mode === 'link' ? 'Click on the map where the other map is (a city on the region map, say).' : ME.mode === 'homes' ? 'Click on the map to add a home to the chosen area; click a home to remove it.' : 'Click a pin to edit it. Drag pins to move them.'}</p>`;
@@ -42,7 +50,7 @@ function placeForm(w: WorldDef): string {
     if (p.link) {
         return `<h4>Link to another map</h4>${txt('Name', `${path}.name`)}
             ${sel('Opens the map', `${path}.link`, w.maps.filter(m => m.id !== p.map).map(m => [m.id, m.name] as [string, string]))}
-            <p class="mu-muted">In the game, clicking it opens that map.</p>
+            <p class="mu-muted">In the game, clicking it opens that map.</p>${drawRow(w, p)}
             <button class="mu-danger" data-act="me-del-pin">${icon('trash')}<span>Remove</span></button>`;
     }
     const bg = p.bg ? worldFile(w, p.bg) : '';
@@ -57,12 +65,34 @@ function placeForm(w: WorldDef): string {
                 <small class="mu-muted">${Array.isArray(p.closed) ? 'Its own hours.' : 'Like places of its kind (shops close at night, offices at dawn…). Click to set its own hours.'} Closed: nothing to do there, nobody comes for leisure.</small></div></div>
         <div class="mu-me-pfcol"><div class="mu-field"><span>Background of the scene</span>
             <div class="mu-cw-cover is-small" style="${bg ? `background-image:url('${safeUrl(bg)}')` : ''}">${bg ? '' : '<span>The map around it</span>'}</div>
-            <div class="mu-row"><button data-act="me-bg-pick">${icon('image')}<span>From Backgrounds</span></button><button class="mu-ghost" data-act="me-bg-upload">${icon('upload')}<span>Upload</span></button>${bg ? `<button class="mu-ghost" data-act="me-bg-clear">${icon('x')}</button>` : ''}</div></div>
+            <div class="mu-row"><button data-act="me-bg-pick">${icon('image')}<span>From Backgrounds</span></button><button class="mu-ghost" data-act="me-bg-upload">${icon('upload')}<span>Upload</span></button><button class="mu-ghost" data-act="me-bg-paint" ${ME.busy ? 'aria-disabled="true"' : ''} title="Paint it with your ComfyUI">${icon('image')}<span>${ME.busy === 'bg' ? 'Painting…' : 'Paint'}</span></button>${bg ? `<button class="mu-ghost" data-act="me-bg-clear">${icon('x')}</button>` : ''}</div></div>
+            ${drawRow(w, p)}
             <details class="mu-me-times" ${Object.keys(p.bgs ?? {}).length ? 'open' : ''}><summary>At other times of the day</summary>
                 ${TIME_SLOTS.map(per => { const b = p.bgs?.[per.id] ? worldFile(w, p.bgs[per.id]) : ''; return `<div class="mu-me-time"><div class="mu-cw-cover is-mini" style="${b ? `background-image:url('${safeUrl(b)}')` : ''}">${b ? '' : '<span>usual</span>'}</div><b>${esc(per.name)}</b>
                     <button class="mu-ghost mu-ibtn" data-act="me-bg-pick" data-period="${esc(per.id)}" title="From Backgrounds">${icon('image')}</button><button class="mu-ghost mu-ibtn" data-act="me-bg-upload" data-period="${esc(per.id)}" title="Upload">${icon('upload')}</button>${b ? `<button class="mu-ghost mu-ibtn" data-act="me-bg-clear" data-period="${esc(per.id)}" title="Use the usual one">${icon('x')}</button>` : ''}</div>`; }).join('')}
                 <small class="mu-muted">Day 5–12 h, afternoon 12–18 h, night 18–5 h. Empty: the usual one.</small></details>
+        ${storyFields(w, p, path)}
         <button class="mu-danger" data-act="me-del-pin">${icon('trash')}<span>Remove this place</span></button></div></div>`;
+}
+// A floor of a building, and how the place opens up in the story (hidden until found, restricted until let in).
+function storyFields(w: WorldDef, p: Place, path: string): string {
+    const buildings = w.places.filter(x => x.id !== p.id && !x.link && !x.in && x.map === p.map);
+    const facs = w.factions ?? [];
+    const o = `${path}.opens`;
+    return `<details class="mu-me-times" ${p.in || p.hidden || p.restricted ? 'open' : ''}><summary>Floors, hidden and restricted</summary>
+        ${sel('A floor of a building', `${path}.in`, [['', '(no: a place of its own)'], ...buildings.map(b => [b.id, b.name] as [string, string])])}
+        ${p.in ? txt('Which floor', `${path}.floor`, 'Floor 3') : ''}
+        <small class="mu-muted">A building is one pin on the map; clicking it shows its floors. Each floor is a place of its own (people, roles, hours); going up or down takes a few minutes.</small>
+        ${chk('Hidden until found', `${path}.hidden`, 'Not on the map until the story gives the player the way there (an address, being taken there).')}
+        ${txt('Restricted: who it is for (empty: open)', `${path}.restricted`, 'Hunters Association members only')}
+        <label class="mu-field"><span>Other names the story may use (commas)</span><input data-input="cw" data-type="csv" data-path="${path}.aka" data-focus="${path}.aka" value="${esc((p.aka ?? []).join(', '))}" placeholder="an address, a nickname"></label>
+        <div class="mu-field"><span>A hidden or restricted place opens by itself when (all that are set)</span>
+            ${txt('You know this person well', `${o}.who`, 'a name')}${num('…with a bond of at least (0-100, empty: 30)', `${o}.bond`, 0)}
+            ${facs.length ? sel('You are in this faction', `${o}.faction`, [['', '(any)'], ...facs.map(f => [f.id, f.name] as [string, string])]) : ''}
+            ${p.opens?.faction ? sel('…at this rank or higher', `${o}.rank`, (facs.find(f => f.id === p.opens!.faction)?.ranks ?? []).map((r, k) => [String(k + 1), r] as [string, string]), 'num') : ''}
+            ${num('RPG level at least', `${o}.level`, 0)}${num('Reputation here at least (-100 to 100)', `${o}.rep`, -100)}
+            <small class="mu-muted">The story can open it too: when a reply names it, a short AI check asks whether the player just learned the way or got let in. And the player can open it by hand.</small></div>
+    </details>`;
 }
 
 function bgPicker(): string {
@@ -278,6 +308,22 @@ Object.assign(ACT, {
         const per = el.dataset.period ?? '';
         try { setBg(p, per, await uploadWorldPicture(W(), f, `place-${p.name}${per ? `-${per}` : ''}`)); CW.dirty = true; } catch (e: any) { toast(String(e?.message ?? e), 'error'); }
         notify();
+    },
+    'me-draw': async () => {
+        const w = W(), p = w.places.find(p => p.id === ME.pin); if (!p || ME.busy) return;
+        ME.busy = 'draw'; notify();
+        try { await drawIntoMap(w, p); CW.dirty = true; toast(`${p.name} is drawn into the map.`, 'success'); } catch (e: any) { toast(String(e?.message ?? e), 'error'); }
+        ME.busy = ''; notify();
+    },
+    'me-draw-undo': () => {
+        const m = curMap(W()); const old = m && DRAWN[m.id]; if (!m || !old) return;
+        m.image = old.image; if (old.images) m.images = old.images; delete DRAWN[m.id]; CW.dirty = true; notify();
+    },
+    'me-bg-paint': async () => {
+        const w = W(), p = w.places.find(p => p.id === ME.pin); if (!p || ME.busy) return;
+        ME.busy = 'bg'; notify();
+        try { p.bg = await paintBackground(w, p); CW.dirty = true; } catch (e: any) { toast(String(e?.message ?? e), 'error'); }
+        ME.busy = ''; notify();
     },
     'me-bg-clear': (el) => { const p = W().places.find(p => p.id === ME.pin); if (p) { setBg(p, el.dataset.period ?? '', ''); CW.dirty = true; } notify(); },
 });

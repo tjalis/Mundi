@@ -7,7 +7,7 @@ import { state, notify, settings, saveSettings, esc, busy, game, toast } from '.
 import { tutorialTarget } from './tutorial.js';
 import { worlds, worldFile, loadAllWorlds, getWorld, isScenario } from '../core/world.js';
 import { groupOf, charOf, thumb, openChat, openChatRef, personaThumb } from '../st/bridge.js';
-import { enterGame, listSaves, deleteSave, gameEntry, type SaveRow } from '../sim/game.js';
+import { enterGame, enterAttached, attachedEntry, listSaves, deleteSave, gameEntry, type SaveRow } from '../sim/game.js';
 import { startWizard } from './newgame.js';
 import { openLibrary } from './library.js';
 import { openGallery } from './gallery.js';
@@ -18,6 +18,7 @@ import { icon } from './icons.js';
 function lastPlayed() {
     const l = settings().last;
     if (!l) return null;
+    if (l.kind === 'world' && l.attached) { const e = attachedEntry(l.chatId); return e && (e.avatar ? charOf(e.avatar) : groupOf(e.groupId)) ? { ...l, title: e.title } : null; }
     if (l.kind === 'world') { const e = l.group ? gameEntry(l.group) : null; return e && groupOf(e.groupId) ? { ...l, title: e.title } : null; }
     if (l.avatar) { const c = charOf(l.avatar); return c ? { ...l, title: String(c.name) } : null; }
     const g = l.group ? groupOf(l.group) : null;
@@ -71,8 +72,8 @@ const isFav = (r: SaveRow) => favs().includes(keyOf(r));
 function saveRow(r: SaveRow, i: number) {
     const confirm = state.modal?.type === 'delete-save' && state.modal.i === i;
     // world saves show the persona you play; scenarios the character (or the group)
-    const persona = r.kind === 'world' ? gameEntry(r.groupId)?.persona : '';
-    const img = r.kind === 'chat' ? (r.avatar ? thumb(r.avatar) : groupOf(r.groupId)?.avatar_url || '') : persona ? personaThumb(persona) : '';
+    const persona = r.kind === 'world' ? (r.attached ? attachedEntry(r.chatId) : gameEntry(r.groupId))?.persona : '';
+    const img = r.kind === 'chat' || (r.attached && !persona) ? (r.avatar ? thumb(r.avatar) : groupOf(r.groupId)?.avatar_url || '') : persona ? personaThumb(persona) : '';
     const sel = LOAD.sel.has(i);
     return `<li class="mu-save ${r.current ? 'is-current' : ''} ${sel ? 'is-sel' : ''}" data-act="save-pick" data-i="${esc(i)}">
         <label class="mu-save-check" title="Select (or Ctrl + click the row)"><input type="checkbox" data-input="save-sel" data-i="${esc(i)}" ${sel ? 'checked' : ''}></label>
@@ -154,14 +155,16 @@ Object.assign(ACT, {
             else state.view = 'chat';
             notify(); return;
         }
-        if (l.kind === 'world') await busy('Opening your game', () => enterGame(l.group!, l.chatId));
+        if (l.kind === 'world' && l.attached) await busy('Opening your game', () => enterAttached(l.chatId!));
+        else if (l.kind === 'world') await busy('Opening your game', () => enterGame(l.group!, l.chatId));
         else await busy('Opening the chat', async () => { await openChat({ avatar: l.avatar, group: l.group, chatId: l.chatId ?? '' }); state.view = 'chat'; });
     },
     'load-kind': (el) => { LOAD.kind = el.dataset.v as any; notify(); },
     'save-load': async (el) => {
         const r = (state.saves as SaveRow[])[Number(el.dataset.i)];
         if (!r) return;
-        if (r.kind === 'world') await busy('Opening the save', () => enterGame(r.groupId, r.chatId));
+        if (r.attached) await busy('Opening the save', () => enterAttached(r.chatId));
+        else if (r.kind === 'world') await busy('Opening the save', () => enterGame(r.groupId, r.chatId));
         else await busy('Opening the chat', async () => { await openChat({ avatar: r.avatar, group: r.groupId || undefined, chatId: r.chatId }); state.view = 'chat'; });
     },
     'save-del': (el) => { state.modal = { type: 'delete-save', i: Number(el.dataset.i) }; notify(); },

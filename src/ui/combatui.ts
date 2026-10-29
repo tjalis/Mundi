@@ -11,8 +11,9 @@ import { pictureAt } from '../sim/daynight.js';
 import { money } from '../sim/needs.js';
 import { presentAt } from '../sim/people.js';
 import { sheetOf, isRpg } from '../sim/rpg.js';
+import { isDown } from '../sim/wounds.js';
 import {
-    combatOf, current, yourTurn, targetsFor, standing, chooseMode, act, combatSpells, closeCombat, type Combat, type Fighter,
+    combatOf, current, yourTurn, targetsFor, standing, healable, chooseMode, act, combatSpells, closeCombat, type Combat, type Fighter,
 } from '../sim/combat.js';
 import {
     partyOf, friends, mercs, memberName, memberKey, canJoin, join, leave, setRow, forHire, hire, dismissMerc, hiringHere,
@@ -41,12 +42,12 @@ function sprite(g: Save, w: WorldDef, c: Combat, f: Fighter, hp: number, hit: bo
         : f.who === 'friend' ? `<img src="${esc(thumb(f.ref))}" alt="">` : f.icon ? `<i>${esc(f.icon)}</i>` : f.who === 'you' && personaThumb() ? `<img src="${esc(personaThumb())}" alt="">` : `<i>${f.who === 'merc' ? '⚔️' : '★'}</i>`;
     const now = current(c)?.id === f.id && !c.over;
     const can = targets.has(f.id);
-    return `<button class="mu-pkb-sprite is-${f.side} ${hp <= 0 ? 'is-down' : ''} ${now ? 'is-now' : ''} ${hit ? 'is-hit' : ''} ${can ? 'is-target' : ''}" ${can ? `data-act="fight-target" data-id="${esc(f.id)}"` : 'tabindex="-1"'} title="${esc(f.name)}">${face}<span></span></button>`;
+    return `<button class="mu-pkb-sprite is-${f.side} ${(c.mortal ? isDown(hp, f.max) : hp <= 0) ? 'is-down' : ''} ${c.mortal && hp <= 0 ? 'is-dead' : ''} ${now ? 'is-now' : ''} ${hit ? 'is-hit' : ''} ${can ? 'is-target' : ''}" ${can ? `data-act="fight-target" data-id="${esc(f.id)}"` : 'tabindex="-1"'} title="${esc(f.name)}">${face}<span></span></button>`;
 }
 function infoBox(c: Combat, f: Fighter, hp: number, targets: Set<string>): string {
     const p = hpPct(hp, f.max); const can = targets.has(f.id);
     const chips = [f.defend ? '🛡️' : '', f.shield ? '✨' : '', f.hidden ? '👤' : '', c.mark?.on === f.id ? '🎯' : '', f.inspired ? '🎵' : '', f.rage ? '🔥' : ''].join('');
-    return `<${can ? `button data-act="fight-target" data-id="${esc(f.id)}"` : 'div'} class="mu-pkb-info ${hp <= 0 ? 'is-down' : ''} ${can ? 'is-target' : ''} ${current(c)?.id === f.id && !c.over ? 'is-now' : ''}">
+    return `<${can ? `button data-act="fight-target" data-id="${esc(f.id)}"` : 'div'} class="mu-pkb-info ${(c.mortal ? isDown(hp, f.max) : hp <= 0) ? 'is-down' : ''} ${can ? 'is-target' : ''} ${current(c)?.id === f.id && !c.over ? 'is-now' : ''}">
         <b data-notr>${esc(f.name)}${chips ? ` <em>${chips}</em>` : ''}</b><small>Lv${f.level}</small>
         <span class="mu-pkb-hp"><i>HP</i><span><s class="${hpTone(p)}" style="width:${p}%"></s></span></span>
         ${f.side === 'us' ? `<small class="mu-pkb-num">${Math.max(0, hp)}/${f.max}</small>` : ''}</${can ? 'button' : 'div'}>`;
@@ -70,7 +71,7 @@ export function combatHtml(): string {
         else if (UI.pick === 'ability') targets = new Set(targetsFor(c, me, true).map(f => f.id));
         else {
             const sp = combatSpells(g, w).find(x => `cast:${x.id}` === UI.pick);
-            targets = new Set((sp?.effect.kind === 'heal' || sp?.school === 'abjuration' ? standing(c, 'us') : targetsFor(c, me, true)).map(f => f.id));
+            targets = new Set((sp?.effect.kind === 'heal' ? healable(c, 'us') : sp?.school === 'abjuration' ? standing(c, 'us') : targetsFor(c, me, true)).map(f => f.id));
         }
     }
     const side = (s: 'us' | 'them', row: Row) => c.list.filter(f => f.side === s && f.row === row).map(f => sprite(g, w, c, f, hpOf(f), hitNow(f), targets)).join('');
@@ -88,7 +89,7 @@ export function combatHtml(): string {
         text = `<p>${esc(shown.text)}</p><button class="mu-pkb-next" data-act="pkb-next" title="Next">▼</button>`;
         menu = queue.length > 1 ? `<div class="mu-pkb-menu is-one">${B('pkb-skip', 'SKIP ▶▶', '', `${queue.length} more`)}</div>` : '';
     } else if (c.over) {
-        const head = c.over === 'won' ? '🏆 Victory!' : c.over === 'fled' ? '🏃 You got away safely.' : '☠️ You were defeated…';
+        const head = c.over === 'won' ? '🏆 Victory!' : c.over === 'fled' ? '🏃 You got away.' : c.mortal ? '☠️ You lost the fight…' : '☠️ You were defeated…';
         text = `<p><b>${head}</b> ${(c.msgs ?? []).map(m => esc(m)).join(' ')}</p>`;
         menu = `<div class="mu-pkb-menu is-one">${B('fight-close', 'CONTINUE')}</div>`;
     } else if (!c.mode) {
