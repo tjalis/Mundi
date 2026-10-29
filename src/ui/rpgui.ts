@@ -11,7 +11,7 @@ import { money } from '../sim/needs.js';
 import { setPrompt } from '../st/bridge.js';
 import {
     isRpg, sheetOf, classOf, hpMax, focusMax, mod, prof, attr, skillBonus, trained, xpFor, maxLevel, pendingSubclass, chooseSubclass,
-    spendPoint, spellsFor, learnSpell, maxPrepared, titleNames, talentTree, talentsOf, talentPoints, tierOpen, canTake, takeTalent, respec,
+    spendPoint, spellsFor, learnSpell, learnSkill, weaponOf, attrCap, maxPrepared, titleNames, talentTree, talentsOf, talentPoints, tierOpen, canTake, takeTalent, respec,
 } from '../sim/rpg.js';
 import { quests, acceptQuest, declineQuest } from '../sim/quests.js';
 import { knownSpells, togglePrepared, cast, canPrepare } from '../sim/magic.js';
@@ -36,12 +36,18 @@ export function sheetApp(g: Save, w: WorldDef, head: string): string {
             <small>Proficiency ${sign(prof(s.level))} · Renown ${s.renown}</small></section>
         ${pendingSubclass(w, s) ? `<section class="mu-branch"><b>Choose your subclass</b>${c!.subclasses.map(x => `<button class="mu-branch-opt" data-act="rpg-sub" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>${esc(x.desc ?? '')}</small></button>`).join('')}</section>` : ''}
         <section><h4>Attributes${s.points ? ` <small class="mu-good">${s.points} point${s.points === 1 ? '' : 's'} to spend</small>` : ''}</h4>
-            <div class="mu-sheet-attrs">${r.attributes.map(a => `<div><small>${esc(a.short)}</small><b>${attr(s, a.id)}</b><em>${sign(mod(attr(s, a.id)))}</em>${s.points && attr(s, a.id) < 20 ? `<button class="mu-ibtn" data-act="rpg-point" data-id="${esc(a.id)}" title="+1 ${esc(a.name)}">${icon('plus')}</button>` : ''}</div>`).join('')}</div></section>
-        <section><h4>Skills</h4><div class="mu-sheet-skills">${r.skills.map(k => `<span class="${trained(w, s).includes(k.id) ? 'is-trained' : ''}"><b>${sign(skillBonus(w, s, k.id))}</b> ${esc(k.name)}</span>`).join('')}</div>
-            <small class="mu-muted">● trained (adds your proficiency). Checks are d20 + the bonus against a difficulty (easy 10, medium 13, hard 16, very hard 19).</small></section>
+            <div class="mu-sheet-attrs">${r.attributes.map(a => `<div><small>${esc(a.short)}</small><b>${attr(s, a.id)}</b><em>${sign(mod(attr(s, a.id)))}</em>${s.points && attr(s, a.id) < attrCap(w) ? `<button class="mu-ibtn" data-act="rpg-point" data-id="${esc(a.id)}" title="+1 ${esc(a.name)}">${icon('plus')}</button>` : ''}</div>`).join('')}</div></section>
+        <section><h4>Skills${s.skillPicks ? ` <small class="mu-good">${s.skillPicks} to learn: tap a skill</small>` : ''}</h4><div class="mu-sheet-skills">${r.skills.map(k => { const on = trained(w, s).includes(k.id); const inner = `<b>${sign(skillBonus(w, s, k.id))}</b> ${esc(k.name)}`;
+                return s.skillPicks && !on ? `<button class="mu-sheet-learn" data-act="rpg-skill" data-id="${esc(k.id)}" title="Learn ${esc(k.name)}">${inner}</button>` : `<span class="${on ? 'is-trained' : ''}">${inner}</span>`; }).join('')}</div>
+            <small class="mu-muted">● trained (adds your proficiency). Checks are d20 + the bonus against a difficulty (easy 10, medium 13, hard 16, very hard 19).</small>
+            ${weaponLine(w, s)}</section>
         ${talentsHtml(w, s)}
         ${origin(g, w)}
     </div>`;
+}
+function weaponLine(w: WorldDef, s: NonNullable<ReturnType<typeof sheetOf>>) {
+    const wp = weaponOf(w, s); if (!wp) return '';
+    return `<small class="mu-muted">Weapon: ${esc(wp.name)} (${wp.dice}d${wp.sides}${wp.ranged ? ', ranged' : ''})${wp.trained ? ', trained' : ', not trained: no proficiency on attacks'}.</small>`;
 }
 function talentsHtml(w: WorldDef, s: NonNullable<ReturnType<typeof sheetOf>>) {
     if ((w.features as any)?.talents === false) return '';
@@ -116,6 +122,7 @@ Object.assign(ACT, {
     'rpg-open': async () => { const p = await import('./phone.js'); p.P.open = true; p.P.app = 'sheet' as any; notify(); },
     'rpg-sub': (el) => { const c = S(); if (c) done(chooseSubclass(c.g, c.w, el.dataset.id!)); },
     'rpg-point': (el) => { const c = S(); if (c && spendPoint(c.g, c.w, el.dataset.id!)) done(''); },
+    'rpg-skill': (el) => { const c = S(); if (c && learnSkill(c.g, c.w, el.dataset.id!)) done('Skill learned.'); },
     'rpg-learn': (el) => { const c = S(); if (c && learnSpell(c.g, c.w, el.dataset.id!)) done(lex(c.w, 'spellLearned')); },
     'rpg-prep': (el) => { const c = S(); if (c) done(togglePrepared(c.g, c.w, el.dataset.id!), 'info'); },
     'rpg-cast': (el) => {

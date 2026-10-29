@@ -3,6 +3,7 @@
 // per world in the world creator.
 import type { WorldDef, ActionDef, Crisis, HabitDef, FestivalDef, PetDef, FactionDef, RealmDef, InstitutionDef, GoodDef, CropDef, BusinessDef, RecipeDef, TowerDef, BladeDef } from './world.js';
 import { MEDIEVAL_RPG, MODERN_RPG, type RpgDef } from './rpgdef.js';
+import { upgradeTraits } from './traitlib.js';
 
 export interface ShopItem { id: string; name: string; desc: string; icon: string; price: number;
     /** trips take this share of the time (0.5 = half); the best vehicle you own counts */ travel?: number;
@@ -348,6 +349,21 @@ export function upgradeWorld(w: WorldDef): WorldDef {
             s.zero = { ...(s.zero ?? {}), crisis: structuredClone(c) };
         }
         (w as any).presetCrises = true;
+    }
+    // weapon skills, crafts and weapons to choose (any class can learn them): once for an RPG made before them
+    if (!(w as any).presetSkills2) {
+        if (p.rpg && w.rpg) {
+            const attrs = new Set(w.rpg.attributes.map(a => a.id));
+            for (const k of p.rpg.skills) if (attrs.has(k.attr) && !w.rpg.skills.some(x => x.id === k.id)) w.rpg.skills.push({ ...k });
+            w.rpg.weapons ??= structuredClone(p.rpg.weapons ?? []).filter(x => attrs.has(x.attr));
+            for (const c of w.rpg.classes ?? []) { const d = p.rpg.classes.find(x => x.id === c.id); if (c.weapon && d?.weapon?.skill && c.weapon.name === d.weapon.name) c.weapon.skill ??= d.weapon.skill; }
+        }
+        (w as any).presetSkills2 = true;
+    }
+    // the bigger trait lists, Flaws, and no limit on how many you pick: once (the creator can change them after)
+    if (!(w as any).presetTraits2) {
+        if (w.sheet) w.sheet.traits = upgradeTraits(w.sheet.traits, p === PRESETS.medieval || (w.sheet.traits ?? []).some(g => g.options?.includes('Literate')));
+        (w as any).presetTraits2 = true;
     }
     return w;
 }

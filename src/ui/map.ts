@@ -20,7 +20,10 @@ import { isRpg, longRest } from '../sim/rpg.js';
 import { journeyOf, travelRoad } from '../sim/journey.js';
 import type { Save } from '../core/store.js';
 import { thumb } from '../st/bridge.js';
-import { pins, placeOf, travelMinutes, playerHomeId, isOuting, outingName } from '../sim/places.js';
+import { pins, placeOf, travelMinutes, playerHomeId, isOuting, outingName, floorsOf, lockedNow, floorName } from '../sim/places.js';
+import { openBuilding } from './discoveryui.js';
+import { rulesText } from '../sim/discovery.js';
+import { gateAt, RANKS } from '../sim/gates.js';
 import { planOn, floorsOn, planTarget, unplaced, floorOf } from '../sim/plan.js';
 import { presentAt, whereNow } from '../sim/people.js';
 import { writeDiary, diaryOn, markDayStart } from '../sim/diary.js';
@@ -50,13 +53,19 @@ const curMap = (g: Save, w: WorldDef) => (viewMap && w.maps.find(m => m.id === v
 function pinsHtml(g: Save, w: WorldDef) {
     const map = curMap(g, w);
     const sel = state.sel ?? g.player.loc;
-    return pins(g, w).filter(p => p.map === map.id).map(p => {
-        const here = presentAt(g, w, p.id);
+    const all = pins(g, w);
+    return all.filter(p => p.map === map.id && !(p.in && all.some(b => b.id === p.in))).map(p => {
+        // a building: one pin for all its floors (who is on any of them, and you, when you are on one)
+        const floors = p.link || p.home ? [] : floorsOf(g, w, p.id);
+        const inside = [p.id, ...floors.map(f => f.id)];
+        const here = floors.length ? inside.flatMap(id => presentAt(g, w, id)) : presentAt(g, w, p.id);
         const known = here.filter(r => r.met), strangers = here.length - known.length;
         if (p.link) return `<button class="mu-pin is-link" data-act="pin" data-loc="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%" aria-label="${esc(p.name)}"><span class="dot">${icon('map')}</span><span class="label">${esc(p.name)}</span></button>`;
         const shut = !p.home && systemOn(w, 'living') && !openNow(g, w, p.id);
-        return `<button class="mu-pin ${p.home ? 'is-home' : ''} ${shut ? 'is-closed' : ''} ${p.id === sel ? 'is-sel' : ''} ${p.id === g.player.loc ? 'is-you' : ''}" data-act="pin" data-loc="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%" aria-label="${esc(p.name)}">
-            <span class="dot"></span><span class="label">${esc(p.name)}</span>
+        const lock = !p.home && lockedNow(g, w, p); const gt = gateAt(g, p.id);
+        const you = inside.includes(g.player.loc);
+        return `<button class="mu-pin ${p.home ? 'is-home' : ''} ${shut ? 'is-closed' : ''} ${lock ? 'is-locked' : ''} ${floors.length ? 'is-building' : ''} ${gt ? 'is-gate' : ''} ${p.id === sel ? 'is-sel' : ''} ${you ? 'is-you' : ''}" data-act="pin" data-loc="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%" aria-label="${esc(p.name)}">
+            <span class="dot">${lock ? icon('lock') : ''}</span><span class="label">${esc(p.name)}${floors.length ? `<em>${floors.length + 1} floors</em>` : ''}${gt ? `<em>${Math.max(0, gt.breaks - g.day)} d</em>` : ''}</span>
             ${here.length ? `<span class="faces">${known.slice(0, 3).map(r => `<img draggable="false" src="${esc(thumb(r.avatar))}" alt="" title="${esc(r.name)}">`).join('')}${strangers || known.length > 3 ? `<i>+${strangers + Math.max(0, known.length - 3)}</i>` : ''}</span>` : ''}
         </button>`;
     }).join('');
@@ -92,8 +101,22 @@ function popHtml(g: Save, w: WorldDef, loc: string, touch: boolean) {
     const here = presentAt(g, w, loc);
     const people = here.length ? `<div class="mu-pop-people">${here.map(r => `<span class="mu-pop-person"><img src="${esc(thumb(r.avatar))}" alt=""><b>${esc(r.met ? r.name : 'Someone')}</b></span>`).join('')}</div>`
         : '<small class="mu-muted">Nobody here right now.</small>';
+    const floors = p.home ? [] : floorsOf(g, w, loc); const lock = p.home ? '' : lockedNow(g, w, p);
+    if (floors.length) {
+        const inside = [p, ...floors];
+        const who = inside.flatMap(f => presentAt(g, w, f.id));
+        return `<h3>${esc(p.name)}</h3>${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
+            <ul class="mu-pop-floors">${[...floors].reverse().map(f => `<li class="${f.id === g.player.loc ? 'is-you' : ''}">${lockedNow(g, w, f) ? icon('lock') : ''}<b data-notr>${esc(floorName(f))}</b></li>`).join('')}</ul>
+            ${who.length ? `<div class="mu-pop-people">${who.map(r => `<span class="mu-pop-person"><img src="${esc(thumb(r.avatar))}" alt=""><b>${esc(r.met ? r.name : 'Someone')}</b></span>`).join('')}</div>` : ''}
+            ${lock ? `<small class="mu-lock">${icon('lock')} ${esc(lock)}</small>` : ''}
+            <small class="mu-muted">${inside.some(f => f.id === g.player.loc) ? 'You are in this building' : `${travelMinutes(g, w, g.player.loc, loc)} min away`} · click to choose a floor</small>
+            ${touch ? `<button class="mu-primary" data-act="dv-bld" data-id="${esc(loc)}">Floors</button>` : ''}`;
+    }
+    const gt = gateAt(g, loc);
     return `<h3>${esc(p.name)}</h3>
         ${p.desc ? `<p>${esc(p.desc)}</p>` : ''}${p.event ? `<p class="mu-muted">${esc(p.event)}</p>` : ''}
+        ${gt ? `<small class="mu-lock">🌀 ${RANKS[gt.rank]}-rank · ${gt.floors} floors · breaks on day ${gt.breaks}</small>` : ''}
+        ${lock ? `<small class="mu-lock">${icon('lock')} ${esc(lock)}${p.opens ? ` · opens with: ${esc(rulesText(g, w, p.opens))}` : ''}</small>` : ''}
         ${people}
         ${you ? `<span class="mu-badge">You are here</span>` : `<small class="mu-muted">${travelMinutes(g, w, g.player.loc, loc)} min away · click to go</small>`}
         ${touch || you ? `<button class="mu-primary" data-act="go" data-loc="${esc(loc)}" data-sfx="open">${you ? 'Enter the scene' : 'Go here'}</button>` : ''}
@@ -227,8 +250,8 @@ export function mapHtml() {
     const parent = map.parent ? w.maps.find(m => m.id === map.parent) : null;
     const away = map.id !== youMap(g, w).id;
     const many = w.maps.length > 1;
-    const nav = parent || away || many ? `<div class="mu-mapnav">${many ? `<button data-act="maps-pick" title="All maps">${icon('map')}<span>Maps</span></button>` : ''}${parent ? `<button data-act="open-map" data-map="${esc(parent.id)}">${icon('up')}<span>${esc(parent.name)}</span></button>` : ''}
-        ${away ? `<button data-act="open-map" data-map="">${icon('pin')}<span>Back to where you are</span></button>` : ''}<b data-notr>${esc(map.name)}</b></div>` : '';
+    const nav = `<div class="mu-mapnav">${many ? `<button data-act="maps-pick" title="All maps">${icon('map')}<span>Maps</span></button>` : ''}${parent ? `<button data-act="open-map" data-map="${esc(parent.id)}">${icon('up')}<span>${esc(parent.name)}</span></button>` : ''}
+        ${away ? `<button data-act="open-map" data-map="">${icon('pin')}<span>Back to where you are</span></button>` : ''}<button data-act="dv-add" title="A place the story just gave you">${icon('plus')}<span>Add a place</span></button><b data-notr>${esc(map.name)}</b></div>`;
     return `<div class="mu-map">${nav}${mapsPicker ? mapsPickerHtml(g, w, map.id) : ''}
         <div class="mu-stage" data-stage>
             <div class="mu-mapimg" style="--r:${map.ratio};background-image:url('${safeUrl(worldFile(w, pictureAt(w, g.minutes, map.image, map.images)!))}')">${pinsHtml(g, w)}</div>
@@ -507,6 +530,7 @@ Object.assign(ACT, {
         const link = placeOf(g, w, el.dataset.loc!)?.link;
         if (link) { viewMap = link; popFor = ''; state.mapView = {} as any; notify(); setTimeout(() => applyMapView(true), 0); return; }
         if ((e as PointerEvent).pointerType === 'touch' && popFor !== el.dataset.loc) { showPop(el, true); return; }
+        if (floorsOf(g, w, el.dataset.loc!).length) { popFor = ''; hidePop(0); openBuilding(el.dataset.loc!); return; }
         return goTo(el.dataset.loc!);
     },
     go: (el) => goTo(el.dataset.loc!),

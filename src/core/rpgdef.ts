@@ -26,7 +26,10 @@ export interface RpgClass {
     ability?: Ability;
 }
 // A weapon: `dice` d `sides` + the attribute's modifier; `ranged` hits any row.
-export interface Weapon { name: string; dice: number; sides: number; attr: string; ranged?: boolean; element?: Element }
+/** `skill`: the weapon skill it needs to add your proficiency (none: anyone who carries it is trained) */
+export interface Weapon { name: string; dice: number; sides: number; attr: string; ranged?: boolean; element?: Element; skill?: string }
+/** a weapon you can choose when making a character */
+export interface RpgWeapon extends Weapon { id: string }
 // A class's move in a fight, once per fight: heal yourself or an ally, guard the back row, inspire, hide, mark a foe, a shield.
 export interface Ability { name: string; kind: 'heal' | 'guard' | 'inspire' | 'hide' | 'mark' | 'shield' | 'rage'; amount?: number; desc?: string }
 // Someone (or something) to fight: hit points, armor, attack bonus and damage, a level (for experience), the row it
@@ -49,6 +52,8 @@ export type Element = 'fire' | 'water' | 'lightning' | 'ice' | 'earth' | 'light'
 export interface RpgSpell { id: string; name: string; school: string; level: number; cost: number; desc: string; effect: SpellEffect; element?: Element; /** what it does in a fight (techniques and spells of any school): a blow, or a guard */ combat?: 'damage' | 'shield' }
 export interface RpgTitle { id: string; name: string; desc: string; when: { count?: string; n?: number; level?: number; renown?: number } }
 export interface RpgDef {
+    /** the system's name (Classic fantasy, Nen hunter…), told to the AI */
+    name?: string;
     attributes: RpgAttribute[];
     /** the attribute that adds to hit points */
     hpAttr: string;
@@ -69,11 +74,56 @@ export interface RpgDef {
     /** sellswords for hire: names to give them, and the daily wage per level */
     mercNames?: string[];
     mercWage?: number;
+    /** weapons a new character can carry instead of their class's (a healer with a mace, a mage with a dagger) */
+    weapons?: RpgWeapon[];
+    /** points for starting skills: a class skill costs 1, any other 2 (default 6) */
+    skillPoints?: number;
+    /** how attributes are bought: D&D point buy (default 27 points, 8 to 15), or flat (each point +1 from `min`) */
+    pointBuy?: { points: number; min: number; max: number; flat?: boolean };
+    /** attribute points gained at each level (default: 2 every 4 levels), and the highest a score can go (default 20) */
+    levelPoints?: number;
+    attrCap?: number;
+    /** which attribute does what in a fight (defaults: DEX, or the second attribute) */
+    roles?: { defense?: string; initiative?: string; melee?: string };
+}
+
+// The attribute that plays a part: armor and initiative (agility), bare hands (strength).
+export function roleAttr(r: RpgDef | null | undefined, role: 'defense' | 'initiative' | 'melee'): string {
+    const has = (id?: string) => !!id && !!r?.attributes.some(a => a.id === id);
+    const set = r?.roles?.[role];
+    if (has(set)) return set!;
+    const order = role === 'melee' ? ['str', 'pow', 'bod'] : ['dex', 'agi', 'spd', 'ref'];
+    return order.find(has) ?? r?.attributes[role === 'melee' ? 0 : 1]?.id ?? r?.attributes[0]?.id ?? (role === 'melee' ? 'str' : 'dex');
 }
 
 const A = (id: string, name: string, short: string, desc: string): RpgAttribute => ({ id, name, short, desc });
 const S = (id: string, name: string, attr: string): RpgSkill => ({ id, name, attr });
 
+// Weapon skills and crafts (any class can learn them): a cleric can be good with a mace, a mage with a dagger.
+export const MEDIEVAL_EXTRA_SKILLS: RpgSkill[] = [
+    S('blades', 'Blades', 'str'), S('blunt', 'Blunt weapons', 'str'), S('polearms', 'Polearms', 'str'), S('bows', 'Bows', 'dex'), S('thrown', 'Thrown weapons', 'dex'),
+    S('unarmed', 'Unarmed fighting', 'str'), S('shields', 'Shields', 'con'), S('riding', 'Riding', 'dex'), S('lockpicking', 'Lockpicking', 'dex'),
+    S('smithing', 'Smithing', 'int'), S('alchemy', 'Alchemy', 'int'), S('herbalism', 'Herbalism', 'wis'), S('cooking', 'Cooking', 'wis'), S('sailing', 'Sailing', 'wis'),
+    S('gambling', 'Gambling', 'wis'), S('etiquette', 'Etiquette', 'cha'), S('leadership', 'Leadership', 'cha'), S('bartering', 'Bartering', 'cha'),
+];
+const W = (id: string, name: string, dice: number, sides: number, attr: string, skill: string, ranged = false): RpgWeapon => ({ id, name, dice, sides, attr, skill, ...(ranged ? { ranged } : {}) });
+export const MEDIEVAL_WEAPONS: RpgWeapon[] = [
+    W('dagger', 'dagger', 1, 4, 'dex', 'blades'), W('shortsword', 'shortsword', 1, 6, 'dex', 'blades'), W('longsword', 'longsword', 1, 8, 'str', 'blades'), W('greatsword', 'greatsword', 2, 6, 'str', 'blades'),
+    W('rapier', 'rapier', 1, 8, 'dex', 'blades'), W('mace', 'mace', 1, 6, 'str', 'blunt'), W('warhammer', 'warhammer', 1, 8, 'str', 'blunt'), W('staff', 'quarterstaff', 1, 6, 'str', 'blunt'),
+    W('flail', 'flail', 1, 8, 'str', 'blunt'), W('spear', 'spear', 1, 6, 'str', 'polearms'), W('halberd', 'halberd', 1, 10, 'str', 'polearms'), W('shortbow', 'shortbow', 1, 6, 'dex', 'bows', true),
+    W('longbow', 'longbow', 1, 8, 'dex', 'bows', true), W('crossbow', 'crossbow', 1, 8, 'dex', 'bows', true), W('axes', 'throwing axes', 1, 6, 'str', 'thrown', true), W('fists', 'fists', 1, 4, 'str', 'unarmed'),
+];
+export const MODERN_EXTRA_SKILLS: RpgSkill[] = [
+    S('firearms', 'Firearms', 'dex'), S('blades', 'Knives and blades', 'dex'), S('blunt', 'Clubs and bats', 'str'), S('unarmed', 'Hand-to-hand', 'str'), S('thrown', 'Throwing', 'dex'),
+    S('driving', 'Driving', 'dex'), S('piloting', 'Piloting', 'dex'), S('lockpicking', 'Lockpicking', 'dex'), S('mechanics', 'Mechanics', 'int'),
+    S('science', 'Science', 'int'), S('law', 'Law', 'int'), S('business', 'Business', 'int'), S('languages', 'Languages', 'int'), S('cooking', 'Cooking', 'wis'),
+    S('animals', 'Animal handling', 'wis'), S('gambling', 'Gambling', 'wis'), S('leadership', 'Leadership', 'cha'), S('seduction', 'Seduction', 'cha'), S('streetsmarts', 'Street smarts', 'cha'),
+];
+export const MODERN_WEAPONS: RpgWeapon[] = [
+    W('knife', 'knife', 1, 4, 'dex', 'blades'), W('machete', 'machete', 1, 6, 'str', 'blades'), W('bat', 'baseball bat', 1, 6, 'str', 'blunt'), W('baton', 'baton', 1, 6, 'str', 'blunt'),
+    W('fists', 'fists', 1, 4, 'str', 'unarmed'), W('pistol', 'pistol', 1, 8, 'dex', 'firearms', true), W('revolver', 'revolver', 1, 8, 'dex', 'firearms', true), W('shotgun', 'shotgun', 2, 4, 'dex', 'firearms', true),
+    W('rifle', 'rifle', 1, 10, 'dex', 'firearms', true), W('taser', 'taser', 1, 6, 'dex', 'firearms', true), W('bricks', 'whatever you can throw', 1, 4, 'dex', 'thrown', true),
+];
 export const MEDIEVAL_RPG: RpgDef = {
     attributes: [
         A('str', 'Strength', 'STR', 'Lifting, climbing, hitting hard.'),
@@ -89,15 +139,17 @@ export const MEDIEVAL_RPG: RpgDef = {
         S('arcana', 'Arcana', 'int'), S('history', 'History', 'int'), S('investigation', 'Investigation', 'int'), S('nature', 'Nature', 'int'), S('religion', 'Religion', 'int'),
         S('animals', 'Animal handling', 'wis'), S('insight', 'Insight', 'wis'), S('medicine', 'Medicine', 'wis'), S('perception', 'Perception', 'wis'), S('survival', 'Survival', 'wis'),
         S('deception', 'Deception', 'cha'), S('intimidation', 'Intimidation', 'cha'), S('performance', 'Performance', 'cha'), S('persuasion', 'Persuasion', 'cha'),
+        ...MEDIEVAL_EXTRA_SKILLS,
     ],
+    weapons: MEDIEVAL_WEAPONS,
     classes: [
-        { id: 'fighter', name: 'Fighter', desc: 'Trained in arms and armor; the steadiest blade in any company.', hit: 10, key: 'str', skills: ['athletics', 'intimidation', 'perception', 'survival', 'history'], armor: 6, weapon: { name: 'longsword', dice: 1, sides: 10, attr: 'str' }, ability: { name: 'Second wind', kind: 'heal', amount: 35, desc: 'Catch your breath: heal yourself.' }, subAt: 3,
+        { id: 'fighter', name: 'Fighter', desc: 'Trained in arms and armor; the steadiest blade in any company.', hit: 10, key: 'str', skills: ['athletics', 'intimidation', 'perception', 'survival', 'history'], armor: 6, weapon: { name: 'longsword', dice: 1, sides: 10, attr: 'str', skill: 'blades' }, ability: { name: 'Second wind', kind: 'heal', amount: 35, desc: 'Catch your breath: heal yourself.' }, subAt: 3,
             subclasses: [{ id: 'champion', name: 'Champion', desc: 'Raw might: strikes that land harder.', skill: 'athletics' }, { id: 'battlemaster', name: 'Battle master', desc: 'Tactics and maneuvers.', skill: 'history' }, { id: 'guardian', name: 'Guardian', desc: 'A shield for others.', skill: 'perception' }] },
-        { id: 'rogue', name: 'Rogue', desc: 'Quick hands and quicker wits; locks, lies and shadows.', hit: 8, key: 'dex', skills: ['stealth', 'sleight', 'deception', 'acrobatics', 'investigation', 'insight'], armor: 2, weapon: { name: 'rapier', dice: 1, sides: 8, attr: 'dex' }, ability: { name: 'Vanish', kind: 'hide', desc: 'Slip out of sight: your next attack has advantage and deals extra damage.' }, subAt: 3,
+        { id: 'rogue', name: 'Rogue', desc: 'Quick hands and quicker wits; locks, lies and shadows.', hit: 8, key: 'dex', skills: ['stealth', 'sleight', 'deception', 'acrobatics', 'investigation', 'insight'], armor: 2, weapon: { name: 'rapier', dice: 1, sides: 8, attr: 'dex', skill: 'blades' }, ability: { name: 'Vanish', kind: 'hide', desc: 'Slip out of sight: your next attack has advantage and deals extra damage.' }, subAt: 3,
             subclasses: [{ id: 'thief', name: 'Thief', desc: 'Nothing is out of reach.', skill: 'sleight' }, { id: 'assassin', name: 'Assassin', desc: 'Strike first, unseen.', skill: 'stealth' }, { id: 'swashbuckler', name: 'Swashbuckler', desc: 'Charm and a rapier.', skill: 'persuasion' }] },
-        { id: 'ranger', name: 'Ranger', desc: 'At home in the wild; tracker, hunter, guide.', hit: 10, key: 'dex', skills: ['survival', 'nature', 'animals', 'perception', 'stealth'], armor: 4, weapon: { name: 'longbow', dice: 1, sides: 8, attr: 'dex', ranged: true }, ability: { name: 'Hunter\'s mark', kind: 'mark', amount: 4, desc: 'Mark a foe: the whole party deals more damage to it.' }, subAt: 3,
+        { id: 'ranger', name: 'Ranger', desc: 'At home in the wild; tracker, hunter, guide.', hit: 10, key: 'dex', skills: ['survival', 'nature', 'animals', 'perception', 'stealth'], armor: 4, weapon: { name: 'longbow', dice: 1, sides: 8, attr: 'dex', ranged: true, skill: 'bows' }, ability: { name: 'Hunter\'s mark', kind: 'mark', amount: 4, desc: 'Mark a foe: the whole party deals more damage to it.' }, subAt: 3,
             subclasses: [{ id: 'hunter', name: 'Hunter', desc: 'Quarry never escapes.', skill: 'survival' }, { id: 'beastmaster', name: 'Beast master', desc: 'A loyal animal companion.', skill: 'animals' }] },
-        { id: 'cleric', name: 'Cleric', faith: true, secular: 'Healer', desc: 'A servant of the gods: healing, wards and faith made real.', hit: 8, key: 'wis', skills: ['religion', 'medicine', 'insight', 'persuasion', 'history'], schools: ['restoration', 'abjuration', 'divination'], armor: 5, weapon: { name: 'mace', dice: 1, sides: 6, attr: 'str' }, ability: { name: 'Prayer of healing', kind: 'heal', amount: 30, desc: 'Heal the most hurt ally.' }, subAt: 3,
+        { id: 'cleric', name: 'Cleric', faith: true, secular: 'Healer', desc: 'A servant of the gods: healing, wards and faith made real.', hit: 8, key: 'wis', skills: ['religion', 'medicine', 'insight', 'persuasion', 'history'], schools: ['restoration', 'abjuration', 'divination'], armor: 5, weapon: { name: 'mace', dice: 1, sides: 6, attr: 'str', skill: 'blunt' }, ability: { name: 'Prayer of healing', kind: 'heal', amount: 30, desc: 'Heal the most hurt ally.' }, subAt: 3,
             subclasses: [{ id: 'life', name: 'Life domain', desc: 'Healing comes easily.', school: 'restoration' }, { id: 'knowledge', name: 'Knowledge domain', desc: 'Secrets and lore.', school: 'divination' }, { id: 'light', name: 'Light domain', desc: 'Radiance that drives back the dark.', school: 'abjuration' }] },
         { id: 'mage', name: 'Mage', desc: 'A scholar of the arcane, a grimoire under the arm.', hit: 6, key: 'int', skills: ['arcana', 'history', 'investigation', 'insight', 'religion'], schools: ['evocation', 'abjuration', 'illusion', 'enchantment', 'divination'], armor: 0, weapon: { name: 'fire bolt', dice: 1, sides: 10, attr: 'int', ranged: true, element: 'fire' }, ability: { name: 'Shield', kind: 'shield', amount: 5, desc: 'A shimmering ward: +5 armor until your next turn.' }, subAt: 5,
             subclasses: [{ id: 'evoker', name: 'School of Evocation', desc: 'Fire and thunder.', school: 'evocation' }, { id: 'illusionist', name: 'School of Illusion', desc: 'Nothing is what it seems.', school: 'illusion' }, { id: 'enchanter', name: 'School of Enchantment', desc: 'Minds bend to you.', school: 'enchantment' }, { id: 'abjurer', name: 'School of Abjuration', desc: 'Wards and protection.', school: 'abjuration' }] },
@@ -203,17 +255,19 @@ export const MODERN_RPG: RpgDef = {
         S('investigation', 'Investigation', 'int'), S('history', 'Knowledge', 'int'), S('tech', 'Technology', 'int'),
         S('insight', 'Insight', 'wis'), S('medicine', 'First aid', 'wis'), S('perception', 'Perception', 'wis'), S('survival', 'Streetwise', 'wis'),
         S('deception', 'Deception', 'cha'), S('intimidation', 'Intimidation', 'cha'), S('performance', 'Performance', 'cha'), S('persuasion', 'Persuasion', 'cha'),
+        ...MODERN_EXTRA_SKILLS,
     ],
+    weapons: MODERN_WEAPONS,
     classes: [
-        { id: 'martial', name: 'Martial artist', desc: 'Years in the dojo: body, breath and discipline.', hit: 10, key: 'wis', skills: ['athletics', 'acrobatics', 'insight', 'perception'], schools: ['karate', 'kungfu', 'capoeira', 'boxing'], armor: 2, weapon: { name: 'fists and feet', dice: 1, sides: 8, attr: 'dex' }, ability: { name: 'Flurry', kind: 'rage', amount: 3, desc: 'A storm of blows: more damage, less guard.' }, subAt: 3,
+        { id: 'martial', name: 'Martial artist', desc: 'Years in the dojo: body, breath and discipline.', hit: 10, key: 'wis', skills: ['athletics', 'acrobatics', 'insight', 'perception'], schools: ['karate', 'kungfu', 'capoeira', 'boxing'], armor: 2, weapon: { name: 'fists and feet', dice: 1, sides: 8, attr: 'dex', skill: 'unarmed' }, ability: { name: 'Flurry', kind: 'rage', amount: 3, desc: 'A storm of blows: more damage, less guard.' }, subAt: 3,
             subclasses: [{ id: 'karateka', name: 'Karateka', desc: 'Hard, direct strikes.', school: 'karate' }, { id: 'kungfu_master', name: 'Kung fu master', desc: 'Flow and inner calm.', school: 'kungfu' }, { id: 'capoeirista', name: 'Capoeirista', desc: 'Dance, trickery and kicks.', school: 'capoeira' }, { id: 'boxer', name: 'Boxer', desc: 'Footwork and fists.', school: 'boxing' }] },
-        { id: 'soldier', name: 'Ex-soldier', desc: 'Trained to fight, still carrying the habits.', hit: 10, key: 'str', skills: ['athletics', 'intimidation', 'perception', 'survival'], armor: 5, weapon: { name: 'pistol', dice: 1, sides: 8, attr: 'dex', ranged: true }, ability: { name: 'Suppressing fire', kind: 'mark', amount: 3, desc: 'Pin a target down: everyone hits it harder.' }, subAt: 3,
+        { id: 'soldier', name: 'Ex-soldier', desc: 'Trained to fight, still carrying the habits.', hit: 10, key: 'str', skills: ['athletics', 'intimidation', 'perception', 'survival'], armor: 5, weapon: { name: 'pistol', dice: 1, sides: 8, attr: 'dex', ranged: true, skill: 'firearms' }, ability: { name: 'Suppressing fire', kind: 'mark', amount: 3, desc: 'Pin a target down: everyone hits it harder.' }, subAt: 3,
             subclasses: [{ id: 'commando', name: 'Commando', desc: 'Close-quarters expert.', skill: 'stealth' }, { id: 'sharpshooter', name: 'Sharpshooter', desc: 'One shot, one problem solved.', skill: 'perception' }] },
         { id: 'hacker', name: 'Hacker', desc: 'Systems, cameras and locks bend to your keyboard.', hit: 6, key: 'int', skills: ['tech', 'investigation', 'stealth', 'deception'], armor: 0, weapon: { name: 'taser', dice: 1, sides: 6, attr: 'dex', ranged: true, element: 'lightning' }, ability: { name: 'Kill the lights', kind: 'hide', desc: 'Cameras and lights go dark: your next attack lands unseen.' }, subAt: 3,
             subclasses: [{ id: 'netrunner', name: 'Netrunner', desc: 'Lives online.', skill: 'tech' }, { id: 'social_engineer', name: 'Social engineer', desc: 'The weakest link is people.', skill: 'persuasion' }] },
-        { id: 'medic', name: 'Medic', desc: 'Paramedic training: you keep people alive.', hit: 8, key: 'wis', skills: ['medicine', 'insight', 'perception', 'persuasion'], armor: 2, weapon: { name: 'baton', dice: 1, sides: 6, attr: 'str' }, ability: { name: 'Patch up', kind: 'heal', amount: 30, desc: 'Heal the most hurt ally.' }, subAt: 3,
+        { id: 'medic', name: 'Medic', desc: 'Paramedic training: you keep people alive.', hit: 8, key: 'wis', skills: ['medicine', 'insight', 'perception', 'persuasion'], armor: 2, weapon: { name: 'baton', dice: 1, sides: 6, attr: 'str', skill: 'blunt' }, ability: { name: 'Patch up', kind: 'heal', amount: 30, desc: 'Heal the most hurt ally.' }, subAt: 3,
             subclasses: [{ id: 'trauma', name: 'Trauma surgeon', desc: 'Miracles in the worst moments.', skill: 'medicine' }, { id: 'counselor', name: 'Counselor', desc: 'Minds heal too.', skill: 'insight' }] },
-        { id: 'detective', name: 'Detective', desc: 'You notice what others miss.', hit: 8, key: 'int', skills: ['investigation', 'insight', 'perception', 'intimidation', 'survival'], armor: 2, weapon: { name: 'revolver', dice: 1, sides: 8, attr: 'dex', ranged: true }, ability: { name: 'Read the opponent', kind: 'mark', amount: 4, desc: 'Find the weak spot: the whole party deals more damage to it.' }, subAt: 3,
+        { id: 'detective', name: 'Detective', desc: 'You notice what others miss.', hit: 8, key: 'int', skills: ['investigation', 'insight', 'perception', 'intimidation', 'survival'], armor: 2, weapon: { name: 'revolver', dice: 1, sides: 8, attr: 'dex', ranged: true, skill: 'firearms' }, ability: { name: 'Read the opponent', kind: 'mark', amount: 4, desc: 'Find the weak spot: the whole party deals more damage to it.' }, subAt: 3,
             subclasses: [{ id: 'private_eye', name: 'Private eye', desc: 'Shadows and stakeouts.', skill: 'stealth' }, { id: 'inspector', name: 'Inspector', desc: 'The badge opens doors.', skill: 'intimidation' }] },
         { id: 'influencer', name: 'Influencer', desc: 'A million followers and a way with words.', hit: 6, key: 'cha', skills: ['persuasion', 'performance', 'deception', 'insight'], armor: 0, weapon: { name: 'pepper spray', dice: 1, sides: 4, attr: 'dex', ranged: true }, ability: { name: 'Hype', kind: 'inspire', amount: 3, desc: 'Everyone feels like the main character: their next blow lands truer.' }, subAt: 3,
             subclasses: [{ id: 'streamer', name: 'Streamer', desc: 'Always live.', skill: 'performance' }, { id: 'activist', name: 'Activist', desc: 'A cause and a crowd.', skill: 'persuasion' }] },
@@ -337,8 +391,21 @@ export const POWERS_RPG: RpgDef = {
 export const godsActive = (w: { realm?: { pantheon?: unknown[] } } | null | undefined) => !!w?.realm?.pantheon?.length;
 const VIEW = new WeakMap<RpgDef, { key: string; v: RpgDef }>();
 // (an arcane realm also makes every spell cost 1 less focus, never below 1)
-export const rpgOf = (w: { rpg?: RpgDef; realm?: { pantheon?: unknown[]; power?: string } } | null | undefined): RpgDef | null => {
-    const r = w?.rpg && w.rpg.classes?.length ? w.rpg : null;
+// A game can be played with another RPG system than its world's (chosen when starting it; kept in the save as
+// `rpgDef`): the open game's system wins for its own world. `withRpg` forces one while a game is being made.
+let FORCED: RpgDef | null = null;
+let GAME: () => { world?: string; rpgDef?: RpgDef } | null = () => null;
+export const setRpgGame = (f: typeof GAME) => { GAME = f; };
+export function withRpg<T>(def: RpgDef | null | undefined, fn: () => T): T {
+    const was = FORCED; FORCED = def ?? null;
+    try { return fn(); } finally { FORCED = was; }
+}
+const ownRpg = (w: { id?: string } | null | undefined): RpgDef | null => {
+    if (FORCED) return FORCED;
+    const g = GAME(); return g?.rpgDef?.classes?.length && w?.id && g.world === w.id ? g.rpgDef : null;
+};
+export const rpgOf = (w: { id?: string; rpg?: RpgDef; realm?: { pantheon?: unknown[]; power?: string } } | null | undefined): RpgDef | null => {
+    const r = ownRpg(w) ?? (w?.rpg && w.rpg.classes?.length ? w.rpg : null);
     if (!r) return null;
     const gods = godsActive(w), arcane = w?.realm?.power === 'arcane';
     const faithy = r.classes.some(c => c.faith) || r.attributes.some(a => a.faith);

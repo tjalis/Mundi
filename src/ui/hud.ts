@@ -13,13 +13,14 @@ import { payOf, lockedOut } from '../sim/bills.js';
 //   bottom      — the dialogue box (scene.ts); bottom right: the phone, peeking up when it is closed
 import { needWord } from '../sim/life.js';
 import { lifeOverlays, soloOf } from './lifeui.js';
-import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame } from '../core/store.js';
+import { game, esc, state, UI, saveSettings, notify, nowAbs, clockMode, onPhone, toast, saveGame, hostOf } from '../core/store.js';
 import { getWorld, activeStatuses, systemOn, type StatusDef, type WorldDef, deviceLook, offScreenWork, isScenario, HOME_NEEDS, homeNeedsOn } from '../core/world.js';
 import { levelChip } from './rpgui.js';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import type { Save } from '../core/store.js';
 import { personaThumb, personaName, thumb, setPrompt } from '../st/bridge.js';
 import { personaPickHtml } from './scene.js';
+import { detachHtml } from './attach.js';
 import { outingHtml } from './outing.js';
 import { residentsHtml } from './residents.js';
 import { guestDialogsHtml } from './guestsui.js';
@@ -52,6 +53,7 @@ import { lifeActs, festivalChip, schoolActs } from './lifeplus.js';
 import { factionActs } from './factionsui.js';
 import { holdingsActs } from './holdingsui.js';
 import { adventureActs } from './adventureui.js';
+import { discoveryActs } from './discoveryui.js';
 import { rpgOf } from '../core/rpgdef.js';
 
 /* ---------- you ---------- */
@@ -144,6 +146,7 @@ function corner(g: Save, w: WorldDef) {
             ${isScenario(w) ? `<button data-act="res-open">${icon('users')}<span>Who lives here</span></button>` : ''}
             ${isScenario(w) ? `<button data-act="sc-open" data-v="persona"><span class="mh-drawer-mew"><img class="mh-drawer-me" src="${esc(personaThumb())}" alt=""></span><span>Your persona<small data-notr>${esc(personaName())}</small></span></button>` : ''}
             <button data-act="hud-look">${icon('palette')}<span>Chat look</span></button>
+            ${hostOf(g) ? `<button data-act="det-open">${icon('undo')}<span>Detach world</span></button>` : ''}
             <button data-act="open-settings">${icon('gear')}<span>Settings</span></button>
             <button data-act="to-menu" data-sfx="back">${icon('back')}<span>Main menu</span></button></nav>` : ''}
         ${lookOpen ? `<div class="mh-lookpop mh-glass" data-keep="look"><header><b>Chat look</b><button class="mu-ibtn mu-ghost" data-act="hud-look">${icon('x')}</button></header>${lookPanelHtml()}</div>` : ''}
@@ -192,6 +195,7 @@ function actsColumn(g: Save, w: WorldDef) {
         factionActs(g, w),
         holdingsActs(g, w),
         adventureActs(g, w),
+        discoveryActs(g, w),
         ...questsHere(g).map(q => `<button class="mh-act is-quest mh-glass" data-act="quest-step" data-id="${esc(q.id)}"><i>📜</i><b>${esc(q.steps[q.step].what)}</b><small>${esc(q.title)}</small></button>`),
         ...(job ? [`<button class="mh-act is-work mh-glass ${offScreenWork(w) ? 'is-outing' : ''}" data-act="work" ${isOpen(g, job) ? '' : 'aria-disabled="true"'}><i>${icon('briefcase')}</i><b>${offScreenWork(w) ? 'Go to work' : 'Work a shift'} · ${job.shift} h</b><small>${isOpen(g, job) ? `${money(w, payOf(g, job.ranks[g.player.job!.rank].pay * job.shift))}` : `Open ${String(job.hours?.[0] ?? 0).padStart(2, '0')}:00–${String(job.hours?.[1] ?? 24).padStart(2, '0')}:00`}</small></button>`] : []),
         ...jobs.map(o => `<button class="mh-act mh-glass" data-act="apply" data-id="${esc(o.id)}" ${missingCourses(g, w, o).length || triedToday(g, o.id) ? 'aria-disabled="true"' : ''}><i>${icon('briefcase')}</i><b>Apply: ${esc(o.name)}</b><small>${missingCourses(g, w, o).length ? `${lex(w, 'needsCourse')}: ${esc(missingCourses(g, w, o).join(', '))}` : `${money(w, payOf(g, o.ranks[0].pay))}/h · interview 🎲 ${interviewChance(g, o, traitsOf(g))}%`}</small></button>`),
@@ -226,7 +230,7 @@ export function hudHtml() {
     const g = game(); const w = g && getWorld(g.world);
     if (!g || !w) return '';
     // Home: no card of your own (no money, no needs); your persona is in the menu, as in a chat
-    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
+    return `${isScenario(w) ? '' : personaCard(g, w)}${houseBar(g, w)}${clockCard(g, w)}${corner(g, w)}${eventPanelHtml(g, w)}${hereBar(g, w)}${peopleColumn(g, w)}${actsColumn(g, w)}${phoneButton(w)}${bumpHtml()}${apptReminderHtml(g, w)}${conflictHtml(g, w)}${facePlanHtml()}${customModalHtml()}${skipAskHtml(g, w)}${detachHtml()}${personaPickHtml()}${isScenario(w) ? `${outingHtml()}${residentsHtml()}${guestDialogsHtml()}` : ''}${doingHtml()}${lifeOverlays()}`;
 }
 
 Object.assign(ACT, {

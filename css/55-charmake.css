@@ -1,0 +1,13 @@
+/* Character creation: long trait lists, "write your own", the skill budget and RPG systems. */
+#mundi-root .mu-traits .mu-chips { max-height: 10.5em; overflow-y: auto; padding-right: 2px; }
+#mundi-root .mu-trait-own { gap: 6px; margin-top: 6px; flex-wrap: nowrap; }
+#mundi-root .mu-trait-own input { flex: 1; min-width: 0; }
+#mundi-root .mu-skillchips .mu-chip small { margin-left: 4px; opacity: .6; font-size: .8em; }
+#mundi-root .mu-rpg-free { margin: 10px 0 4px; }
+#mundi-root .mu-sheet-skills .mu-sheet-learn { text-align: left; font: inherit; background: none; border: 1px dashed var(--accent); border-radius: 6px; padding: 1px 6px; color: inherit; cursor: pointer; }
+#mundi-root .mu-sheet-skills .mu-sheet-learn:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+#mundi-root .mu-system-card { position: relative; display: flex; }
+#mundi-root .mu-system-card > .mu-origin { flex: 1; width: 100%; }
+#mundi-root .mu-system-del { position: absolute; top: 6px; right: 6px; opacity: .6; }
+#mundi-root .mu-system-del:hover { opacity: 1; }
+#mundi-root .mu-system-lore { margin-top: 8px; }
