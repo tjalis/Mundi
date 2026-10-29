@@ -2677,6 +2677,136 @@
    ],
    "courses": [
     "finance"
+   ],
+   "branches": [
+    {
+     "at": 4,
+     "options": [
+      {
+       "id": "ana_inv",
+       "name": "Investment banking",
+       "desc": "Big deals, bigger hours.",
+       "likes": [
+        "Ambitious",
+        "Charming"
+       ],
+       "ranks": [
+        {
+         "name": "Vice president",
+         "pay": 92
+        },
+        {
+         "name": "Managing director",
+         "pay": 106
+        },
+        {
+         "name": "Partner",
+         "pay": 122
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "ana_risk",
+       "name": "Risk and audit",
+       "desc": "Find the problem before it costs millions.",
+       "likes": [
+        "Serious",
+        "Calm"
+       ],
+       "ranks": [
+        {
+         "name": "Risk manager",
+         "pay": 88
+        },
+        {
+         "name": "Head of risk",
+         "pay": 100
+        },
+        {
+         "name": "Chief financial officer",
+         "pay": 116
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 7,
+     "options": [
+      {
+       "id": "ana_fund",
+       "name": "Fund management",
+       "desc": "Run the money yourself.",
+       "likes": [
+        "Ambitious",
+        "Good with numbers"
+       ],
+       "ranks": [
+        {
+         "name": "Fund manager",
+         "pay": 140
+        },
+        {
+         "name": "Head of investments",
+         "pay": 162
+        },
+        {
+         "name": "Chief investment officer",
+         "pay": 188
+        }
+       ],
+       "promote": [
+        14,
+        14,
+        18
+       ],
+       "after": [
+        "ana_inv"
+       ]
+      },
+      {
+       "id": "ana_board",
+       "name": "The board",
+       "desc": "Steer the whole firm from the top.",
+       "likes": [
+        "Serious",
+        "Calm"
+       ],
+       "ranks": [
+        {
+         "name": "Finance director",
+         "pay": 135
+        },
+        {
+         "name": "Board member",
+         "pay": 156
+        },
+        {
+         "name": "Chief executive officer",
+         "pay": 185
+        }
+       ],
+       "promote": [
+        14,
+        14,
+        18
+       ],
+       "after": [
+        "ana_risk"
+       ]
+      }
+     ]
+    }
    ]
   },
   {
@@ -2725,6 +2855,151 @@
    ],
    "courses": [
     "engineering"
+   ],
+   "branches": [
+    {
+     "at": 3,
+     "options": [
+      {
+       "id": "eng_civ",
+       "name": "Civil engineering",
+       "desc": "Bridges, towers and roads.",
+       "likes": [
+        "Serious",
+        "Handy"
+       ],
+       "ranks": [
+        {
+         "name": "Senior engineer",
+         "pay": 80
+        },
+        {
+         "name": "Lead engineer",
+         "pay": 92
+        },
+        {
+         "name": "Chief engineer",
+         "pay": 106
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "eng_rd",
+       "name": "Research and design",
+       "desc": "Build what does not exist yet.",
+       "likes": [
+        "Curious",
+        "Creative"
+       ],
+       "ranks": [
+        {
+         "name": "R&D engineer",
+         "pay": 78
+        },
+        {
+         "name": "Principal designer",
+         "pay": 90
+        },
+        {
+         "name": "Head of R&D",
+         "pay": 104
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 6,
+     "options": [
+      {
+       "id": "eng_proj",
+       "name": "Major projects",
+       "desc": "Bridges, towers and tunnels the city will keep for a century.",
+       "likes": [
+        "Serious",
+        "Handy"
+       ],
+       "ranks": [
+        {
+         "name": "Project director",
+         "pay": 124
+        },
+        {
+         "name": "Director of works",
+         "pay": 144
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "eng_civ"
+       ]
+      },
+      {
+       "id": "eng_lab",
+       "name": "The lab",
+       "desc": "Inventions with your name on the patent.",
+       "likes": [
+        "Curious",
+        "Smart"
+       ],
+       "ranks": [
+        {
+         "name": "Lead inventor",
+         "pay": 120
+        },
+        {
+         "name": "Director of innovation",
+         "pay": 140
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "eng_rd"
+       ]
+      }
+     ]
+    },
+    {
+     "at": 8,
+     "options": [
+      {
+       "id": "eng_cto",
+       "name": "Chief technology officer",
+       "desc": "The top of the engineering side.",
+       "likes": [],
+       "ranks": [
+        {
+         "name": "Chief technology officer",
+         "pay": 175
+        },
+        {
+         "name": "Founder of your own firm",
+         "pay": 205
+        }
+       ],
+       "promote": [
+        18,
+        18
+       ]
+      }
+     ]
+    }
    ]
   },
   {
@@ -2920,6 +3195,151 @@
    ],
    "courses": [
     "nursing"
+   ],
+   "branches": [
+    {
+     "at": 3,
+     "options": [
+      {
+       "id": "nur_er",
+       "name": "Emergency",
+       "desc": "The ER: fast, loud, life or death.",
+       "likes": [
+        "Calm",
+        "Strong"
+       ],
+       "ranks": [
+        {
+         "name": "ER nurse",
+         "pay": 56
+        },
+        {
+         "name": "Charge nurse",
+         "pay": 65
+        },
+        {
+         "name": "Head of emergency",
+         "pay": 76
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "nur_ped",
+       "name": "Pediatrics",
+       "desc": "The children's ward.",
+       "likes": [
+        "Kind",
+        "Cheerful"
+       ],
+       "ranks": [
+        {
+         "name": "Pediatric nurse",
+         "pay": 54
+        },
+        {
+         "name": "Senior pediatric nurse",
+         "pay": 63
+        },
+        {
+         "name": "Ward director",
+         "pay": 74
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 6,
+     "options": [
+      {
+       "id": "nur_trauma",
+       "name": "Trauma care",
+       "desc": "Run the trauma center on the worst nights.",
+       "likes": [
+        "Calm",
+        "Strong"
+       ],
+       "ranks": [
+        {
+         "name": "Trauma coordinator",
+         "pay": 88
+        },
+        {
+         "name": "Director of trauma care",
+         "pay": 102
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "nur_er"
+       ]
+      },
+      {
+       "id": "nur_np",
+       "name": "Nurse practitioner",
+       "desc": "See your own patients, write your own prescriptions.",
+       "likes": [
+        "Kind",
+        "Smart"
+       ],
+       "ranks": [
+        {
+         "name": "Nurse practitioner",
+         "pay": 86
+        },
+        {
+         "name": "Senior nurse practitioner",
+         "pay": 99
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "nur_ped"
+       ]
+      }
+     ]
+    },
+    {
+     "at": 8,
+     "options": [
+      {
+       "id": "nur_chief",
+       "name": "Chief nursing officer",
+       "desc": "Every nurse in the hospital answers to you.",
+       "likes": [],
+       "ranks": [
+        {
+         "name": "Director of nursing",
+         "pay": 118
+        },
+        {
+         "name": "Chief nursing officer",
+         "pay": 136
+        }
+       ],
+       "promote": [
+        18,
+        18
+       ]
+      }
+     ]
+    }
    ]
   },
   {
@@ -3962,6 +4382,151 @@
    ],
    "courses": [
     "education"
+   ],
+   "branches": [
+    {
+     "at": 3,
+     "options": [
+      {
+       "id": "tea_head",
+       "name": "School leadership",
+       "desc": "Run the school.",
+       "likes": [
+        "Ambitious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "Vice principal",
+         "pay": 52
+        },
+        {
+         "name": "Principal",
+         "pay": 61
+        },
+        {
+         "name": "District superintendent",
+         "pay": 72
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "tea_coach",
+       "name": "Coach and mentor",
+       "desc": "The teacher everyone remembers.",
+       "likes": [
+        "Kind",
+        "Sports"
+       ],
+       "ranks": [
+        {
+         "name": "Head of department",
+         "pay": 50
+        },
+        {
+         "name": "Master teacher",
+         "pay": 58
+        },
+        {
+         "name": "Teacher of the year",
+         "pay": 68
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 6,
+     "options": [
+      {
+       "id": "tea_board",
+       "name": "Education board",
+       "desc": "Set the rules for every school in the city.",
+       "likes": [
+        "Ambitious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "Board director",
+         "pay": 84
+        },
+        {
+         "name": "Deputy commissioner",
+         "pay": 97
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "tea_head"
+       ]
+      },
+      {
+       "id": "tea_train",
+       "name": "Teacher training",
+       "desc": "Teach the teachers.",
+       "likes": [
+        "Kind",
+        "Smart"
+       ],
+       "ranks": [
+        {
+         "name": "Teacher trainer",
+         "pay": 78
+        },
+        {
+         "name": "Dean of education",
+         "pay": 92
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "tea_coach"
+       ]
+      }
+     ]
+    },
+    {
+     "at": 8,
+     "options": [
+      {
+       "id": "tea_comm",
+       "name": "Education commissioner",
+       "desc": "The schools of Porto Alto are yours to shape.",
+       "likes": [],
+       "ranks": [
+        {
+         "name": "Education commissioner",
+         "pay": 110
+        },
+        {
+         "name": "Minister of education",
+         "pay": 128
+        }
+       ],
+       "promote": [
+        18,
+        18
+       ]
+      }
+     ]
+    }
    ]
   },
   {
@@ -5024,7 +5589,7 @@
    },
    "likes": [
     "Creative",
-    "Skilled with hands"
+    "Art"
    ],
    "hours": [
     9,
@@ -5081,6 +5646,1073 @@
     "id": "cooking",
     "level": 6
    }
+  },
+  {
+   "id": "police",
+   "name": "Police officer",
+   "place": "civic",
+   "ranks": [
+    {
+     "name": "Cadet",
+     "pay": 17
+    },
+    {
+     "name": "Officer",
+     "pay": 28
+    },
+    {
+     "name": "Sergeant",
+     "pay": 42
+    }
+   ],
+   "shift": 8,
+   "cost": {
+    "energy": 35,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Serious",
+    "Calm",
+    "Strong"
+   ],
+   "hours": [
+    0,
+    24
+   ],
+   "promote": [
+    5,
+    10
+   ],
+   "needs": [
+    "Strong",
+    "Athletic"
+   ],
+   "courses": [
+    "publicadmin"
+   ],
+   "branches": [
+    {
+     "at": 3,
+     "options": [
+      {
+       "id": "pol_det",
+       "name": "Detective",
+       "desc": "Cases, clues and long nights.",
+       "likes": [
+        "Smart",
+        "Curious"
+       ],
+       "ranks": [
+        {
+         "name": "Detective",
+         "pay": 52
+        },
+        {
+         "name": "Senior detective",
+         "pay": 62
+        },
+        {
+         "name": "Chief of detectives",
+         "pay": 74
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "pol_cmd",
+       "name": "Command",
+       "desc": "Lead the officers on the street.",
+       "likes": [
+        "Ambitious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "Lieutenant",
+         "pay": 50
+        },
+        {
+         "name": "Captain",
+         "pay": 60
+        },
+        {
+         "name": "Police chief",
+         "pay": 72
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 6,
+     "options": [
+      {
+       "id": "pol_major",
+       "name": "Major crimes",
+       "desc": "The cases that make the news.",
+       "likes": [
+        "Smart",
+        "Curious"
+       ],
+       "ranks": [
+        {
+         "name": "Head of major crimes",
+         "pay": 86
+        },
+        {
+         "name": "Deputy commissioner",
+         "pay": 100
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "pol_det"
+       ]
+      },
+      {
+       "id": "pol_dist",
+       "name": "District command",
+       "desc": "A whole district of the city is yours to keep safe.",
+       "likes": [
+        "Ambitious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "District commander",
+         "pay": 84
+        },
+        {
+         "name": "Assistant commissioner",
+         "pay": 98
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "pol_cmd"
+       ]
+      }
+     ]
+    },
+    {
+     "at": 8,
+     "options": [
+      {
+       "id": "pol_comm",
+       "name": "Police commissioner",
+       "desc": "The whole force answers to you.",
+       "likes": [],
+       "ranks": [
+        {
+         "name": "Police commissioner",
+         "pay": 115
+        },
+        {
+         "name": "Head of national police",
+         "pay": 134
+        }
+       ],
+       "promote": [
+        18,
+        18
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "firefighter",
+   "name": "Firefighter",
+   "place": "industrial",
+   "ranks": [
+    {
+     "name": "Recruit",
+     "pay": 16
+    },
+    {
+     "name": "Firefighter",
+     "pay": 27
+    },
+    {
+     "name": "Lieutenant",
+     "pay": 40
+    }
+   ],
+   "shift": 10,
+   "cost": {
+    "energy": 40,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Calm",
+    "Kind",
+    "Strong"
+   ],
+   "hours": [
+    0,
+    24
+   ],
+   "promote": [
+    5,
+    10
+   ],
+   "needs": [
+    "Strong",
+    "Athletic"
+   ],
+   "courses": [
+    "firstaid"
+   ]
+  },
+  {
+   "id": "reporter",
+   "name": "Reporter",
+   "place": "downtown",
+   "ranks": [
+    {
+     "name": "Intern",
+     "pay": 14
+    },
+    {
+     "name": "Reporter",
+     "pay": 26
+    },
+    {
+     "name": "Editor",
+     "pay": 44
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Curious",
+    "Outgoing",
+    "Books"
+   ],
+   "hours": [
+    8,
+    20
+   ],
+   "promote": [
+    4,
+    9
+   ],
+   "branches": [
+    {
+     "at": 3,
+     "options": [
+      {
+       "id": "rep_inv",
+       "name": "Investigative",
+       "desc": "The stories someone wants buried.",
+       "likes": [
+        "Curious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "Investigative reporter",
+         "pay": 52
+        },
+        {
+         "name": "Senior correspondent",
+         "pay": 61
+        },
+        {
+         "name": "Editor-in-chief",
+         "pay": 72
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      },
+      {
+       "id": "rep_tv",
+       "name": "TV anchor",
+       "desc": "Your face on the evening news.",
+       "likes": [
+        "Charming",
+        "Outgoing"
+       ],
+       "ranks": [
+        {
+         "name": "Field anchor",
+         "pay": 50
+        },
+        {
+         "name": "News anchor",
+         "pay": 60
+        },
+        {
+         "name": "Prime-time anchor",
+         "pay": 74
+        }
+       ],
+       "promote": [
+        12,
+        12,
+        12
+       ]
+      }
+     ]
+    },
+    {
+     "at": 6,
+     "options": [
+      {
+       "id": "rep_world",
+       "name": "Foreign desk",
+       "desc": "Report from wherever the world is on fire.",
+       "likes": [
+        "Curious",
+        "Serious"
+       ],
+       "ranks": [
+        {
+         "name": "Foreign correspondent",
+         "pay": 84
+        },
+        {
+         "name": "Head of the foreign desk",
+         "pay": 97
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "rep_inv"
+       ]
+      },
+      {
+       "id": "rep_show",
+       "name": "Your own show",
+       "desc": "A show with your name in the title.",
+       "likes": [
+        "Charming",
+        "Outgoing"
+       ],
+       "ranks": [
+        {
+         "name": "Talk show host",
+         "pay": 88
+        },
+        {
+         "name": "Network star",
+         "pay": 104
+        }
+       ],
+       "promote": [
+        14,
+        14
+       ],
+       "after": [
+        "rep_tv"
+       ]
+      }
+     ]
+    },
+    {
+     "at": 8,
+     "options": [
+      {
+       "id": "rep_chief",
+       "name": "Head of news",
+       "desc": "You decide what the city hears about.",
+       "likes": [],
+       "ranks": [
+        {
+         "name": "Director of news",
+         "pay": 118
+        },
+        {
+         "name": "Media mogul",
+         "pay": 140
+        }
+       ],
+       "promote": [
+        18,
+        18
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "athlete",
+   "name": "Pro athlete",
+   "place": "stadium",
+   "ranks": [
+    {
+     "name": "Reserve player",
+     "pay": 20
+    },
+    {
+     "name": "Starter",
+     "pay": 40
+    },
+    {
+     "name": "Team captain",
+     "pay": 70
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 40,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Sports",
+    "Ambitious",
+    "Athletic"
+   ],
+   "hours": [
+    8,
+    20
+   ],
+   "promote": [
+    6,
+    12
+   ],
+   "needs": [
+    "Athletic"
+   ],
+   "hobby": {
+    "id": "fitness",
+    "level": 5
+   }
+  },
+  {
+   "id": "stadiumcrew",
+   "name": "Stadium crew",
+   "place": "stadium",
+   "ranks": [
+    {
+     "name": "Crew member",
+     "pay": 14
+    },
+    {
+     "name": "Crew supervisor",
+     "pay": 22
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Sports",
+    "Strong"
+   ],
+   "hours": [
+    10,
+    23
+   ],
+   "promote": [
+    5
+   ]
+  },
+  {
+   "id": "usher",
+   "name": "Cinema usher",
+   "place": "cinema",
+   "ranks": [
+    {
+     "name": "Usher",
+     "pay": 13
+    },
+    {
+     "name": "Projectionist",
+     "pay": 20
+    },
+    {
+     "name": "Cinema manager",
+     "pay": 30
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Movies",
+    "Calm"
+   ],
+   "hours": [
+    12,
+    24
+   ],
+   "promote": [
+    4,
+    9
+   ]
+  },
+  {
+   "id": "ranger",
+   "name": "Park ranger",
+   "place": "woods",
+   "ranks": [
+    {
+     "name": "Trail volunteer",
+     "pay": 14
+    },
+    {
+     "name": "Ranger",
+     "pay": 24
+    },
+    {
+     "name": "Head ranger",
+     "pay": 36
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Nature",
+    "Calm",
+    "Athletic"
+   ],
+   "hours": [
+    6,
+    18
+   ],
+   "promote": [
+    4,
+    9
+   ]
+  },
+  {
+   "id": "counselor",
+   "name": "Camp counselor",
+   "place": "pinecamp",
+   "ranks": [
+    {
+     "name": "Counselor",
+     "pay": 13
+    },
+    {
+     "name": "Camp director",
+     "pay": 24
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Outgoing",
+    "Kind",
+    "Nature"
+   ],
+   "hours": [
+    7,
+    21
+   ],
+   "promote": [
+    6
+   ]
+  },
+  {
+   "id": "trailguide",
+   "name": "Trail guide",
+   "place": "pc_falls",
+   "ranks": [
+    {
+     "name": "Guide",
+     "pay": 15
+    },
+    {
+     "name": "Senior guide",
+     "pay": 24
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Nature",
+    "Travel",
+    "Outgoing"
+   ],
+   "hours": [
+    7,
+    18
+   ],
+   "promote": [
+    5
+   ]
+  },
+  {
+   "id": "mangroveguide",
+   "name": "Mangrove guide",
+   "place": "pl_trails",
+   "ranks": [
+    {
+     "name": "Guide",
+     "pay": 15
+    },
+    {
+     "name": "Senior guide",
+     "pay": 24
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Nature",
+    "Travel",
+    "Outgoing"
+   ],
+   "hours": [
+    7,
+    18
+   ],
+   "promote": [
+    5
+   ]
+  },
+  {
+   "id": "jumpguide",
+   "name": "Bridge jump guide",
+   "place": "bridge",
+   "ranks": [
+    {
+     "name": "Assistant",
+     "pay": 16
+    },
+    {
+     "name": "Jump master",
+     "pay": 28
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Athletic",
+    "Calm",
+    "Outgoing"
+   ],
+   "hours": [
+    9,
+    19
+   ],
+   "promote": [
+    6
+   ],
+   "needs": [
+    "Athletic"
+   ]
+  },
+  {
+   "id": "deckhand",
+   "name": "Ferry deckhand",
+   "place": "mt_pier",
+   "ranks": [
+    {
+     "name": "Deckhand",
+     "pay": 15
+    },
+    {
+     "name": "First mate",
+     "pay": 23
+    },
+    {
+     "name": "Ferry captain",
+     "pay": 34
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Strong",
+    "Travel",
+    "Calm"
+   ],
+   "hours": [
+    5,
+    23
+   ],
+   "promote": [
+    4,
+    9
+   ]
+  },
+  {
+   "id": "busker",
+   "name": "Street performer",
+   "place": "mt_plaza",
+   "ranks": [
+    {
+     "name": "Busker",
+     "pay": 10
+    },
+    {
+     "name": "Local act",
+     "pay": 18
+    },
+    {
+     "name": "Crowd favorite",
+     "pay": 30
+    }
+   ],
+   "shift": 3,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Musical",
+    "Charming",
+    "Outgoing"
+   ],
+   "hours": [
+    11,
+    22
+   ],
+   "promote": [
+    4,
+    9
+   ],
+   "hobby": {
+    "id": "music",
+    "level": 2
+   }
+  },
+  {
+   "id": "libassist",
+   "name": "Library assistant",
+   "place": "mh_library",
+   "ranks": [
+    {
+     "name": "Library assistant",
+     "pay": 14
+    },
+    {
+     "name": "Librarian",
+     "pay": 22
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 20,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Books",
+    "Calm",
+    "Kind"
+   ],
+   "hours": [
+    9,
+    19
+   ],
+   "promote": [
+    5
+   ]
+  },
+  {
+   "id": "caretaker",
+   "name": "Church caretaker",
+   "place": "gv_church",
+   "ranks": [
+    {
+     "name": "Caretaker",
+     "pay": 12
+    },
+    {
+     "name": "Deacon",
+     "pay": 18
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Kind",
+    "Calm"
+   ],
+   "hours": [
+    7,
+    19
+   ],
+   "promote": [
+    6
+   ]
+  },
+  {
+   "id": "chapelkeeper",
+   "name": "Chapel caretaker",
+   "place": "pc_chapel",
+   "ranks": [
+    {
+     "name": "Caretaker",
+     "pay": 12
+    },
+    {
+     "name": "Deacon",
+     "pay": 18
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Kind",
+    "Calm"
+   ],
+   "hours": [
+    7,
+    19
+   ],
+   "promote": [
+    6
+   ]
+  },
+  {
+   "id": "foodtruck",
+   "name": "Food truck cook",
+   "place": "pl_cafes",
+   "ranks": [
+    {
+     "name": "Truck helper",
+     "pay": 14
+    },
+    {
+     "name": "Truck cook",
+     "pay": 21
+    },
+    {
+     "name": "Truck owner",
+     "pay": 30
+    }
+   ],
+   "shift": 6,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Outgoing",
+    "Good cook",
+    "Cooking"
+   ],
+   "hours": [
+    10,
+    22
+   ],
+   "promote": [
+    4,
+    9
+   ],
+   "needs": [
+    "Good cook"
+   ]
+  },
+  {
+   "id": "security",
+   "name": "Night security guard",
+   "place": "mall",
+   "ranks": [
+    {
+     "name": "Security guard",
+     "pay": 16
+    },
+    {
+     "name": "Shift lead",
+     "pay": 24
+    }
+   ],
+   "shift": 8,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Calm",
+    "Strong",
+    "Serious"
+   ],
+   "hours": [
+    22,
+    6
+   ],
+   "promote": [
+    6
+   ]
+  },
+  {
+   "id": "realtor",
+   "name": "Real estate agent",
+   "place": "mt_tower",
+   "ranks": [
+    {
+     "name": "Junior agent",
+     "pay": 16
+    },
+    {
+     "name": "Agent",
+     "pay": 30
+    },
+    {
+     "name": "Broker",
+     "pay": 55
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 25,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Charming",
+    "Ambitious",
+    "Good with numbers"
+   ],
+   "hours": [
+    9,
+    19
+   ],
+   "promote": [
+    5,
+    10
+   ]
+  },
+  {
+   "id": "vetassist",
+   "name": "Vet assistant",
+   "place": "gv_ranch",
+   "ranks": [
+    {
+     "name": "Vet assistant",
+     "pay": 15
+    },
+    {
+     "name": "Vet technician",
+     "pay": 25
+    }
+   ],
+   "shift": 7,
+   "cost": {
+    "energy": 30,
+    "hunger": 15,
+    "thirst": 15,
+    "mood": 5,
+    "hygiene": 15
+   },
+   "likes": [
+    "Kind",
+    "Nature",
+    "Calm"
+   ],
+   "hours": [
+    7,
+    18
+   ],
+   "promote": [
+    5
+   ]
   }
  ],
  "cast": {
