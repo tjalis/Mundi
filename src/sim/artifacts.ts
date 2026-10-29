@@ -17,6 +17,7 @@ import { note } from './facts.js';
 import { addStatus } from './needs.js';
 import { bagOf, addGood, goodDef } from './economy.js';
 import { isRpg, sheetOf, rollCheck, checkWon, changeHp } from './rpg.js';
+import { rpgOf } from '../core/rpgdef.js';
 import { placeOf } from './places.js';
 import { petsOf, petDef } from './pets.js';
 
@@ -83,7 +84,7 @@ afterFight.push((g, w, c) => {
     const bosses = c.list.filter((f: any) => f.side === 'them' && (f.tags ?? []).includes('boss'));
     const out: string[] = [];
     for (const b of bosses) {
-        const foe = w.rpg?.bestiary?.find(x => x.id === b.ref);
+        const foe = rpgOf(w)?.bestiary?.find(x => x.id === b.ref);
         trophiesOf(g).push({ name: `${b.name.replace(/ \d+$/, '')}'s ${foe?.tags?.includes('wild') ? 'head' : 'banner'}`, icon: foe?.icon ?? '🏆', day: g.day });
         out.push(`A trophy for your home: ${b.name}.`);
     }
