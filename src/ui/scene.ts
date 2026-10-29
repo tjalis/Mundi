@@ -1,6 +1,7 @@
 // The scene: the place, the people in it (Expressions sprites), the conversation and the composer.
 // The conversation IS the group chat: generation, streaming, swipes, regenerate, continue, impersonate,
 // editing and deleting all use SillyTavern's own functions.
+import { attachHtml } from './attach.js';
 import { isRpg } from '../sim/rpg.js';
 import { setHtml } from '../core/safe.js';
 import { lex } from '../core/lexicon.js';
@@ -331,6 +332,7 @@ export function chatHtml() {
                 <button data-act="sc-open" data-v="add">${icon('users')}<span>Add a character</span></button>
                 <button data-act="sc-open" data-v="persona"><span class="mh-drawer-mew"><img class="mh-drawer-me" src="${esc(personaThumb())}" alt=""></span><span>Your persona<small data-notr>${esc(personaName())}</small></span></button>
                 <button data-act="sc-open" data-v="lore" class="mh-drawer-lore" title="${esc(chatLores().join(', '))}">${icon('book')}<span>Chat lorebooks${chatLores().length ? `<small data-notr>${chatLores().length > 1 ? `${chatLores().length} lorebooks · ` : ''}${esc(chatLores()[0])}</small>` : '<small>None</small>'}</span></button>
+                <button data-act="att-open">${icon('globe')}<span>Attach a world</span></button>
                 <button data-act="chat-new">${icon('plus')}<span>New chat</span></button>
                 <button data-act="drawer-look" class="${DRAWER.look ? 'is-on' : ''}">${icon('palette')}<span>Look</span></button>
                 <button data-act="open-settings">${icon('gear')}<span>Settings</span></button>
@@ -338,6 +340,7 @@ export function chatHtml() {
                 ${DRAWER.look ? `<div class="mh-drawer-look" data-keep="look">${lookPanelHtml()}</div>` : ''}</nav></div>
         ${portraitHtml()}${lightboxHtml()}${lookConfirmHtml()}
         ${scenarioPicker()}
+        ${attachHtml()}
         ${extMenuHtml()}
     </div>`;
 }

@@ -6,7 +6,7 @@ import { state, notify, esc, game, toast, busy, settings, saveSettings, type Lib
 import { getWorld, loadWorld, BUILT_IN, activeStatuses, worlds } from '../core/world.js';
 import {
     ctx, characters, charOf, thumb, fullCharacter, saveCharacter, personas, savePersona, personaThumb, persona,
-    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, selectedGroup, bindChatLore, type CardPatch,
+    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, bindChatLore, type CardPatch,
     charLorebooks, setCharLorebooks, importCharacterFiles, importLorebookFiles, importPersonaPictures, folders, tagIdsOf, newFolder, putInFolder, isFav, setFavorite, deleteCharacters, deletePersonas, deleteLorebooks,
     createCharacter, createPersona, createLorebook, duplicateCharacter, duplicatePersona, duplicateLorebook,
     setCharacterImage, setPersonaImage, defaultPersona, setDefaultPersona, personaSheet, setPersonaSheet,
@@ -14,7 +14,7 @@ import {
     bgList, bgThumb, bgUrl, bgUpload, bgRename, bgDelete, bgFolderCreate, bgFolderPut, type Bgs,
     refreshList, folderColor, setFolderColor, deleteFolder, personaLore, setPersonaLore, exportCharacter, cardFile, fileNameOf, baseSpriteFolder, loreCount, charTags, tagColor, tagCharacter, untagCharacter, allTags, cardTokens, cachedTokens, folderMade, renameFolder, characterChats, useGreeting, openCharacter,
 } from '../st/bridge.js';
-import { gameEntry, heroDescription, initialsAvatar } from '../sim/game.js';
+import { currentEntry, heroDescription, initialsAvatar } from '../sim/game.js';
 import { sceneText } from '../sim/prompt.js';
 import { ACT, INPUT } from './reg.js';
 import { leaveHtml } from './creator.js';
@@ -471,7 +471,7 @@ function saveTab() {
     const g = game();
     if (!g) return '<p class="mu-muted">No save is open. Load a save to see its notes.</p>';
     const m = ctx().chatMetadata ?? {};
-    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(gameEntry(selectedGroup())?.title ?? '')}</small></div></header>`;
+    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(currentEntry()?.title ?? '')}</small></div></header>`;
     if (!L.edit) return `${head}${read('Author\'s Note', m.note_prompt)}${read('Lorebook', chatLore(), false)}`;
     return `${head}<div class="mu-lib-form">
         ${field('Author\'s Note', 'note_prompt', m.note_prompt ?? '', 'area', { rows: 6, hint: 'A standing instruction for this save only: tone, pacing, what to focus on.' })}

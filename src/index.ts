@@ -46,6 +46,15 @@ function addLauncher() {
         item.addEventListener('click', () => openApp());
         menu.appendChild(item);
     }
+    // a world for the chat open now, straight from SillyTavern's own chat
+    if (menu && !document.getElementById('mundi-attach')) {
+        const item = document.createElement('div');
+        item.id = 'mundi-attach';
+        item.className = 'list-group-item flex-container flexGap5';
+        item.innerHTML = '<div class="fa-solid fa-globe extensionsMenuExtensionButton"></div><span>Mundi: attach a world to this chat</span>';
+        item.addEventListener('click', () => { openApp(); void import('./ui/attach.js').then(m => m.openAttach()); });
+        menu.appendChild(item);
+    }
 }
 
 // Mundi's own block in SillyTavern's Extensions panel: open Mundi, and open it when SillyTavern starts.
@@ -109,7 +118,8 @@ function follow() {
         // "Continue" opens what was last played in Mundi: a world save or a scenario chat
         if (state.open) {
             const ref = openChatRef();
-            if (ref && game() && ref.group) settings().last = { kind: 'world', group: ref.group, chatId: ref.chatId };
+            if (ref && game() && (settings().attached ?? []).some(e => e.chatId === ref.chatId)) settings().last = { kind: 'world', attached: true, group: ref.group, avatar: ref.avatar, chatId: ref.chatId };
+            else if (ref && game() && ref.group) settings().last = { kind: 'world', group: ref.group, chatId: ref.chatId };
             else if (ref && scenarioOpen()) settings().last = { kind: 'chat', ...ref };
             saveSettings();
         }
