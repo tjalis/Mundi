@@ -124,8 +124,9 @@ export function useGreeting(k: number) {
 }
 
 // A scenario is any chat that is not a Mundi game: one character, or a group made from it.
+// (A one-on-one chat with a world attached is a game, not a scenario.)
 export const scenarioGroup = () => (selected_group && !ctx().chatMetadata?.mundi ? groupOf(selected_group) : null);
-export const scenarioOpen = () => !!(currentCharacter() || scenarioGroup());
+export const scenarioOpen = () => !!((currentCharacter() && !ctx().chatMetadata?.mundi) || scenarioGroup());
 export function scenarioCast(): string[] {
     const c = currentCharacter();
     if (c) return [c.avatar];
@@ -291,6 +292,14 @@ export async function setPresent(groupId: string, members: string[], present: st
     if (dirty) await editGroup(g.id, true, false);
 }
 
+// Mutes exactly these members of a group again (a world detached from a group chat gives it back as it was).
+export async function setMuted(groupId: string, muted: string[]) {
+    const g = groupOf(groupId);
+    if (!g) return;
+    g.disabled_members = (muted ?? []).filter(a => (g.members ?? []).includes(a));
+    await editGroup(g.id, true, false);
+}
+
 /* ---------- the open chat ---------- */
 
 export const chat = (): any[] => (globalThis as any).__mundiTutChat ?? ctx().chat ?? [];   // the tutorial has its own lines
@@ -410,6 +419,11 @@ export async function quiet(prompt: string, responseLength = 300, systemPrompt =
 export async function hideMessages(start: number, end: number) {
     if (end < start) return;
     try { await ctx().executeSlashCommandsWithOptions(`/hide ${start}-${end}`); } catch (e) { console.warn('[Mundi] hide', e); }
+}
+// Shows hidden lines to the AI again (SillyTavern's /unhide).
+export async function unhideMessages(start: number, end: number) {
+    if (end < start) return;
+    try { await ctx().executeSlashCommandsWithOptions(`/unhide ${start}-${end}`); } catch (e) { console.warn('[Mundi] unhide', e); }
 }
 
 // One line of dialogue. The prompt is a transcript that ends with "Name:", so any model (text completion

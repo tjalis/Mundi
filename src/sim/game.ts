@@ -11,6 +11,7 @@ import { TUT, settings as settings2 } from '../core/store.js';
 import { note, placeName } from './facts.js';
 import {
     settings, saveSettings, state, game, setGame, saveGame, notify, toast, type Save, type Resident, type GameEntry,
+    type AttachedEntry, type Host,
 } from '../core/store.js';
 import { loadWorld, getWorld, exampleTag, type WorldDef, type Origin, type GameMode } from '../core/world.js';
 import { setWorldDicts } from '../core/tr.js';
@@ -20,7 +21,7 @@ import {
     writeLorebook, bindChatLore, setPresent, saveMeta, chat, currentChatId, selectedGroup, pastChats,
     deleteChat, deleteGroup, setPersonaSheet, personaSheet, personaName, recentChats, ctx, deleteScenarioChat,
     saveName, copyGroupChat, groupChatId,
-    readChatMeta,
+    readChatMeta, openChatRef, chatLores, setChatLores, openChat,
 } from '../st/bridge.js';
 import { playerHomeId } from './places.js';
 import { presentAt } from './people.js';
@@ -166,10 +167,16 @@ export interface NewGame {
     start?: { id: string; text?: string };
     /** memories from another game (a save's chat id): only what the people of this cast remember */
     memoriesFrom?: string;
+    /** attach the world to the open chat (one of your own) instead of making a new group chat (sim/attach.ts) */
+    attach?: boolean;
 }
 
 export async function startNewGame(o: NewGame) {
     const w = o.world;
+    // attaching: the open chat stays as it is (its lines, greetings, lorebook and Author's Note); the save goes into it
+    const host = o.attach ? openChatRef() : null;
+    if (o.attach && !host) throw new Error('Open a chat first.');
+    if (o.attach && game()) throw new Error('This chat already has a world.');
     state.busy = 'Creating the cast'; notify();
     const cast = [...new Set([...(o.examples ? await exampleCards(w) : []), ...o.cast])];
     if (!cast.length) throw new Error('Choose at least one person to live in the world.');
@@ -198,10 +205,13 @@ export async function startNewGame(o: NewGame) {
         ...w.places.map(p => ({ keys: [p.name], content: `${p.name}: ${p.desc ?? ''}`, comment: `Place: ${p.name}` })),
     ]);
 
-    state.busy = 'Creating the world\'s group chat'; notify();
-    const groupId = await createGroup(`Mundi · ${w.name} · ${o.hero.name}`, cast);
-    await openGame(groupId);
-    clearGreetings();
+    let groupId = host?.group ?? '';
+    if (!host) {
+        state.busy = 'Creating the world\'s group chat'; notify();
+        groupId = await createGroup(`Mundi · ${w.name} · ${o.hero.name}`, cast);
+        await openGame(groupId);
+        clearGreetings();
+    }
 
     const taken = new Set<string>();
     const origin: Origin | undefined = w.catalogs.origins?.find(x => x.id === o.hero.origin) ?? w.catalogs.origins?.[0];
@@ -290,19 +300,43 @@ export async function startNewGame(o: NewGame) {
     const books = [...new Set([...(w.lorebooks ?? []), ...(o.lore ?? [])])];
     if (books.length) (save as any).cfg = { ...(save as any).cfg, lore: books };   // keeps the difficulty
     Object.values(save.cast).slice(0, origin?.knows ?? 0).forEach(r => { r.met = true; });
-    setGame(save);
-    await bindChatLore(loreName);
-    if (w.note?.text) {   // the world's Author's Note, the same one SillyTavern uses
-        const m = ctx().chatMetadata;
-        m.note_prompt = w.note.text; m.note_interval = w.note.interval ?? 1; m.note_depth = w.note.depth ?? 4; m.note_position = w.note.position ?? 1;
+    const m = ctx().chatMetadata;
+    if (host) {
+        // the people the chat already knows, and what attaching changes in the chat (put back when it is detached)
+        for (const r of Object.values(save.cast)) r.met = true;
+        const h: Host = {
+            kind: host.group ? 'group' : 'solo', ...(host.group ? { group: host.group } : { avatar: host.avatar }), chatId: host.chatId,
+            attachedAt: chat().length, lore: loreName, prevLore: chatLores(),
+            ...(host.group ? { prevDisabled: [...(groupOf(host.group)?.disabled_members ?? [])] } : {}),
+        };
+        (save as any).host = h;
+        (save as any).visitStart = chat().length;   // the lines before the world came are never hidden
+        setGame(save);
+        await setChatLores([...h.prevLore, loreName]);   // the chat's own lorebook stays its "chat lore"
+        if (w.note?.text && !String(m.note_prompt ?? '').trim()) {
+            m.note_prompt = w.note.text; m.note_interval = w.note.interval ?? 1; m.note_depth = w.note.depth ?? 4; m.note_position = w.note.position ?? 1;
+            h.noteSet = true;
+        }
+    } else {
+        setGame(save);
+        await bindChatLore(loreName);
+        if (w.note?.text) {   // the world's Author's Note, the same one SillyTavern uses
+            m.note_prompt = w.note.text; m.note_interval = w.note.interval ?? 1; m.note_depth = w.note.depth ?? 4; m.note_position = w.note.position ?? 1;
+        }
+        await usePersona(personaFile);
     }
-    await usePersona(personaFile);
     await saveMeta();
 
     const entry: GameEntry = { groupId, world: w.id, title: `${w.name} · ${o.hero.name}`, persona: personaFile, created: Date.now(), last: Date.now() };
-    settings().games.unshift(entry);
-    settings().lastGame = groupId;
-    settings().last = { kind: 'world', group: groupId, chatId: currentChatId() };
+    if (host) {
+        const a: AttachedEntry = { ...entry, title: `${w.name} · ${host.group ? groupOf(host.group)?.name ?? '' : charOf(host.avatar!)?.name ?? ''}`, chatId: host.chatId, ...(host.avatar ? { avatar: host.avatar } : {}), attached: true };
+        settings().attached = [a, ...(settings().attached ?? []).filter(e => e.chatId !== host.chatId)];
+        settings().last = { kind: 'world', attached: true, group: host.group, avatar: host.avatar, chatId: host.chatId };
+    } else {
+        settings().games.unshift(entry);
+        settings().lastGame = groupId;
+        settings().last = { kind: 'world', group: groupId, chatId: currentChatId() };
+    }
     saveSettings();
     await applyGameLore();
     await afterEnter();
@@ -311,7 +345,23 @@ export async function startNewGame(o: NewGame) {
 /* ---------- entering and leaving ---------- */
 
 export const gameEntry = (groupId: string | null) => settings().games.find(e => e.groupId === groupId) ?? null;
-export const currentEntry = () => gameEntry(selectedGroup());
+export const attachedEntry = (chatId: string | null | undefined) => (chatId ? (settings().attached ?? []).find(e => e.chatId === chatId) ?? null : null);
+export const currentEntry = (): GameEntry | null => gameEntry(selectedGroup()) ?? (game() ? attachedEntry(currentChatId()) : null);
+
+// Opens one of your own chats that has a world attached.
+export async function enterAttached(chatId: string) {
+    const entry = attachedEntry(chatId);
+    if (!entry) { toast('This chat has no world attached.', 'error'); return; }
+    if (entry.avatar ? !charOf(entry.avatar) : !groupOf(entry.groupId)) { toast('This chat no longer exists in SillyTavern.', 'error'); return; }
+    await loadWorld(entry.world);
+    await openChat({ avatar: entry.avatar, group: entry.groupId || undefined, chatId });
+    if (!game()) { toast('This chat has no Mundi save any more.', 'error'); return; }
+    entry.last = Date.now();
+    tokenNote();
+    settings().last = { kind: 'world', attached: true, group: entry.groupId || undefined, avatar: entry.avatar, chatId };
+    saveSettings();
+    await afterEnter();
+}
 
 export async function enterGame(groupId: string, chatId?: string) {
     const entry = gameEntry(groupId);
@@ -377,7 +427,9 @@ export function markMet(g: Save, avatar: string): boolean {
 export function syncScene(): Promise<void> {
     syncing = syncing.then(async () => {
         const g = game(); const gid = selectedGroup();
-        if (!g || !gid || TUT.save) return;   // the tutorial's world is not a group chat
+        if (!g || TUT.save) return;   // the tutorial's world is not a group chat
+        // a world attached to a one-on-one chat has no group to mute: who is here goes to the AI in the scene prompt
+        if (!gid && !(g as any).host) return;
         const w = getWorld(g.world);
         if (!w) return;
         const here = presentAt(g, w, g.player.loc);
@@ -386,7 +438,7 @@ export function syncScene(): Promise<void> {
         // the one you were talking to alone left: everyone talks again
         if (solo && !here.some(r => r.avatar === solo)) { (g as any).social.solo = ''; solo = ''; }
         const talking = solo ? [solo] : here.map(r => r.avatar);
-        await setPresent(gid, Object.keys(g.cast), talking);
+        if (gid) await setPresent(gid, Object.keys(g.cast), talking);
         // Home: the room's dress code (the outfits are looked up in the background; the next sync catches up)
         { const { applyDress, dressAt } = await import('./dress.js'); const { outfitsOf, hasOutfit } = await import('../ui/outfits.js'); const code = dressAt(g, g.player.loc);
           applyDress(g, w, a => { const l = outfitsOf(a); if (!code) return l; const h = hasOutfit(a, code); return h === null ? null : h ? [...(l ?? []), code] : (l ?? []); }); }
@@ -414,7 +466,7 @@ export async function portMemories(save: Save, chatId: string) {
 /* ---------- saves list ---------- */
 
 // A row of "Load": a world save (a chat of a game's group) or a scenario (any other SillyTavern chat).
-export interface SaveRow { kind: 'world' | 'chat'; groupId: string; avatar?: string; chatId: string; title: string; world: string; last: number; count: number; current: boolean; preview?: string }
+export interface SaveRow { kind: 'world' | 'chat'; groupId: string; avatar?: string; chatId: string; title: string; world: string; last: number; count: number; current: boolean; preview?: string; /** a world attached to one of your own chats */ attached?: boolean }
 export async function listSaves(): Promise<SaveRow[]> {
     const rows: SaveRow[] = [];
     for (const e of settings().games) {
@@ -425,11 +477,17 @@ export async function listSaves(): Promise<SaveRow[]> {
             rows.push({ kind: 'world', groupId: e.groupId, chatId: id, title: e.title, world: e.world, last: Date.parse(c.last_mes) || Number(c.last_mes) || 0, count: Number(c.chat_items ?? 0), current: id === currentChatId() });
         }
     }
-    // every other SillyTavern chat is a scenario
+    // every other SillyTavern chat is a scenario, unless a world is attached to it
     const games = new Set(settings().games.map(e => e.groupId));
+    const attached = new Map((settings().attached ?? []).map(e => [e.chatId, e] as const));
     try {
         for (const c of await recentChats()) {
             if (c.group && games.has(c.group)) continue;
+            const a = attached.get(c.chatId);
+            if (a && (a.avatar ? a.avatar === c.avatar : a.groupId === c.group)) {
+                rows.push({ kind: 'world', attached: true, groupId: c.group ?? '', avatar: c.avatar, chatId: c.chatId, title: a.title, world: a.world, last: c.last, count: c.count, current: c.chatId === currentChatId(), preview: c.preview });
+                continue;
+            }
             // a chat nobody played (only the greeting, or empty: SillyTavern opens one by itself) is not a save
             if (c.count <= 1) continue;
             rows.push({ kind: 'chat', groupId: c.group ?? '', avatar: c.avatar, chatId: c.chatId, title: c.avatar ? charOf(c.avatar)?.name ?? '' : groupOf(c.group!)?.name ?? '', world: '', last: c.last, count: c.count, current: c.chatId === currentChatId(), preview: c.preview });
@@ -439,6 +497,8 @@ export async function listSaves(): Promise<SaveRow[]> {
 }
 
 export async function deleteSave(r: SaveRow) {
+    // your own chat with a world attached: Mundi never deletes it (detach the world from inside, or delete the chat in SillyTavern)
+    if (r.attached) throw new Error('This is one of your own chats with a world attached. Open it and use "Detach world", or delete the chat in SillyTavern.');
     if (r.kind === 'chat') { await deleteScenarioChat({ avatar: r.avatar, group: r.groupId || undefined, chatId: r.chatId }); return; }
     const g = groupOf(r.groupId);
     if (!g) return;
