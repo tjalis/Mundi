@@ -18,7 +18,7 @@ import { tr } from '../core/tr.js';
 import { thumb, sendCanned, addUserLine, replyAs, personaName, setAsk } from '../st/bridge.js';
 import { weekday } from '../sim/time.js';
 import { fmtClock as hm } from '../core/fmt.js';
-import { placeOf, playerHomeId, pins } from '../sim/places.js';
+import { placeOf, playerHomeId, pins, lockedNow } from '../sim/places.js';
 import { bondOf, isPartner, social, isWith, type PlanKind } from '../sim/social.js';
 import { invite, inviteFace, callOver, askAlong, letGo, cancelPlan, upcoming, planTick, earliest, isWorking, ALONG_BOND, HANGOUT_BOND, DATE_BOND } from '../sim/plans.js';
 import { whereNow } from '../sim/people.js';
@@ -97,7 +97,7 @@ export function planForm(g: Save, w: WorldDef, avatar: string, face = false): st
     if (PL.kind === 'date' && !canDate) PL.kind = 'hangout';
     // a scenario: plans are made in a room of the house (the rooms of this game, and your room)
     const places = isScenario(w) ? [...pins(g, w).filter(p => !p.link && !p.home), { id: playerHomeId, name: 'Your room' }, { id: OUT_PICK, name: 'Somewhere out… (write where)' }]
-        : [...w.places.filter(p => !p.link), ...(placeOf(g, w, playerHomeId) ? [{ id: playerHomeId, name: 'Your home' }] : [])];
+        : [...pins(g, w).filter(p => !p.link && !p.home && !lockedNow(g, w, p)), ...(placeOf(g, w, playerHomeId) ? [{ id: playerHomeId, name: 'Your home' }] : [])];
     if (!places.some(p => p.id === PL.place)) PL.place = places.find(p => ((p as any).tags ?? []).includes('leisure'))?.id ?? places[0]?.id ?? '';
     const times = slots(g);
     while (!times.length && PL.day < 6) { PL.day++; times.push(...slots(g)); }

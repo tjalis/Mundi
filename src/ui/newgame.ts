@@ -1,12 +1,14 @@
 // New game: first a scenario (one character card, straight into a chat) or a world;
 // a world goes: style and world → who lives in it → your character (the world's own sheet) → start.
-import { rpgOf } from '../core/rpgdef.js';
+import { rpgOf, withRpg, type RpgDef } from '../core/rpgdef.js';
+import { RPG_SYSTEMS } from '../core/systems.js';
+import { systemFromLore } from '../sim/rpgfromlore.js';
 import { placeFits } from '../sim/needs.js';
 import { safeUrl } from '../core/safe.js';
-import { defaultAttrs, pointsUsed, POINTS, POINT_COST, mod } from '../sim/rpg.js';
+import { defaultAttrs, defaultSkills, pointsUsed, scoreCost, buyOf, freeRange, skillBudget, skillCost, skillsUsed, fitSkills, mod } from '../sim/rpg.js';
 import { listSaves, type SaveRow } from '../sim/game.js';
 import { castLevel, NEIGHBORS_MIN } from '../sim/happenings.js';
-import { state, notify, esc, toast, game, saveGame } from '../core/store.js';
+import { state, notify, esc, toast, game, saveGame, settings, saveSettings } from '../core/store.js';
 import { roomsOn } from '../sim/places.js';
 import { refreshPrompt } from '../sim/prompt.js';
 import { syncScene } from '../sim/game.js';
@@ -14,7 +16,9 @@ import { DIFFICULTIES } from '../sim/bills.js';
 import { slidesHtml, toneTag } from './slides.js';
 import { presetChipsHtml } from './castpresets.js';
 import { isScenario, SCENARIO_STARTS } from '../core/world.js';
-import { lorebooks, loadLore, quiet } from '../st/bridge.js';
+import { lorebooks, loadLore, quiet, personaLore, characterChats, readCharChat } from '../st/bridge.js';
+import { fillFromPersona, fillBio, type Fill } from '../sim/personafill.js';
+import { makeMeters, meterWord } from '../sim/meters.js';
 import { worlds, getWorld, shortDesc, worldFile, isCustom, exampleTag, styleOf, GAME_MODES, worldLocked, lockedFor, hasTag, type WorldDef } from '../core/world.js';
 import { openCreatorNew, openCreatorEdit, importWorldFile } from './creator.js';
 import { setWorldDicts } from '../core/tr.js';
@@ -26,8 +30,8 @@ import { styleName, inWorld, LOCKED_NOTE } from './styles.js';
 import { pickAndCrop, pickFile } from './cropper.js';
 import { uploadWorldPicture } from '../sim/creator.js';
 import { icon } from './icons.js';
-import { stepHouseholds, yourHouseholdHtml, stepHome } from './ngfamily.js';
-import { traitsHtml, toggleTrait } from './traits.js';
+import { stepHouseholds, yourHouseholdHtml, stepHome, homeInside } from './ngfamily.js';
+import { traitsHtml, toggleTrait, addOwnTrait } from './traits.js';
 import { charPicker, shownChars, resetPick } from './charpick.js';
 
 type Step = 'world' | 'cast' | 'homes' | 'hero' | 'house' | 'review';
@@ -47,7 +51,7 @@ function freshHero(w: WorldDef): Hero {
 export function startWizard() {
     resetPick('cast'); resetPick('scen');
     const w = getWorld('modern') ?? worlds()[0];
-    state.wizard = { mode: null as null | 'scenario' | 'world', sq: '', pick: '', step: 'world' as Step, world: w.id, examples: false, cast: [] as string[], q: '', hero: freshHero(w), portraitUrl: '' };
+    state.wizard = { mode: null as null | 'scenario' | 'world', sq: '', pick: '', step: 'world' as Step, world: w.id, examples: false, exDraw: false, cast: [] as string[], q: '', hero: freshHero(w), portraitUrl: '' };
     setWorldDicts(w.id, w.i18n ?? {});
     state.view = 'newgame';
     notify();
@@ -137,6 +141,7 @@ function stepCast() {
         <p class="mu-muted">Pick cards from your SillyTavern to live in this world. Mundi gives each one a home, a routine and a job; the cards themselves are not changed.</p>
         ${presetChipsHtml()}
         ${castMeter()}
+        ${examplesHtml()}
         ${charPicker({ key: 'cast', list: castList(), selected: wz.cast, act: 'ng-cast', multi: true, selectAllAct: 'ng-cast-all', placeholder: 'Search your characters' })}`;
 }
 
@@ -150,28 +155,76 @@ function playModeHtml() {
     return `<h3>How do you want to play?</h3><div class="mu-heropick is-start">${playable(w).map(x => `<button class="mu-herocard ${m === x.id ? 'is-on' : ''}" data-act="ng-play" data-v="${esc(x.id)}"><b>${esc(x.name)}</b><p>${esc(x.desc)}</p></button>`).join('')}</div>`;
 }
 
-// RPG: class, attributes (point buy) and two trained skills. The background (origin) adds its skills and +1s.
-function rpgState() {
-    const wz = state.wizard, w = W(), r = rpgOf(w);
-    if (!r || playMode() !== 'rpg') return null;
-    if (!wz.rpg || !r.classes.some(c => c.id === wz.rpg.cls)) { const c = r.classes[0]; wz.rpg = { cls: c.id, attrs: defaultAttrs(r, c), skills: c.skills.slice(0, 2) }; }
-    return { wz, w, r, s: wz.rpg as { cls: string; attrs: Record<string, number>; skills: string[] } };
+// RPG: class, attributes (point buy), skills (from a budget: class skills cost 1, others 2) and a weapon. The
+// background (origin) adds its skills and +1s. Unlimited opens everything: any scores, any number of skills.
+type WzRpg = { cls: string; attrs: Record<string, number>; skills: string[]; free?: boolean; weapon?: string };
+// The type of gameplay: the world's own RPG, a built-in system (Nen hunter, Solo dungeon…) or one you made.
+export function systemsFor(w: WorldDef): { id: string; name: string; desc: string; def: RpgDef; mine?: boolean }[] {
+    const own = w.rpg?.classes?.length ? [{ id: 'world', name: w.rpg.name ? `${w.rpg.name} (this world's)` : 'This world\'s RPG', desc: `Made for ${w.name}: ${w.rpg.classes.map(c => c.name).join(', ')}.`, def: w.rpg }] : [];
+    return [...own, ...RPG_SYSTEMS, ...(settings().rpgSystems ?? []).map(x => ({ ...x, mine: true }))];
 }
+const systemOf = () => { const l = systemsFor(W()); return l.find(x => x.id === state.wizard.system) ?? l[0]; };
+// the system chosen, when it is not the world's own (kept in the save)
+const chosenDef = () => { const x = systemOf(); return x && x.id !== 'world' ? x.def : undefined; };
+const sysLore = () => (state.wizard.sysLore ??= { open: false, books: [...(W().lorebooks ?? [])], hint: '', busy: false, bq: '' });
+function systemHtml() {
+    const cur = systemOf(), list = systemsFor(W()), sl = sysLore();
+    const books = lorebooks().filter(b => !sl.bq || b.toLowerCase().includes(String(sl.bq).toLowerCase())).sort((a, b) => a.localeCompare(b));
+    return `<h3>Type of gameplay</h3><div class="mu-cards small mu-systems">${list.map(x => `<div class="mu-system-card"><button class="mu-origin ${x.id === cur?.id ? 'is-on' : ''}" data-act="ng-system" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>${esc(x.def.attributes.map(a => a.short).join(' '))}</small><p>${esc(x.desc)}</p></button>${x.mine ? `<button class="mu-ibtn mu-system-del" data-act="ng-system-del" data-id="${esc(x.id)}" title="Delete this system">${icon('trash')}</button>` : ''}</div>`).join('')}
+        <button class="mu-origin is-new ${sl.open ? 'is-on' : ''}" data-act="ng-system-lore"><b>${icon('sparkles')} From lorebooks</b><small>made by your AI</small><p>Your AI reads lorebooks (a series, a game, your setting) and writes its stats, classes, powers and foes.</p></button></div>
+        ${sl.open ? `<div class="mu-panel mu-system-lore">
+            <p class="mu-muted">Pick the lorebooks to read${W().lorebooks?.length ? ' (this world\'s are picked)' : ''}. The system is saved, so you can choose it again in any world.</p>
+            <input class="mu-search" type="search" data-input="ng-syslore-bq" data-focus="ngsysbq" placeholder="Search lorebooks" value="${esc(sl.bq)}">
+            <div class="mu-chips mu-situation-books">${books.slice(0, 80).map(b => `<button class="mu-chip ${sl.books.includes(b) ? 'is-on' : ''}" data-act="ng-syslore-book" data-name="${esc(b)}" data-notr>${esc(b)}</button>`).join('') || '<span class="mu-muted">No lorebooks.</span>'}</div>
+            <label class="mu-field"><span>What you want (optional)</span><input data-input="ng-syslore-hint" data-focus="ngsyshint" maxlength="300" value="${esc(sl.hint)}" placeholder="Ninja clans and chakra natures; only 5 stats; classes are the hunter ranks…"></label>
+            <div class="mu-row"><button class="mu-primary" data-act="ng-syslore-go" ${sl.books.length && !sl.busy ? '' : 'aria-disabled="true"'}>${icon('sparkles')}<span>${sl.busy ? 'Writing the rules… (two steps)' : 'Make the system'}</span></button><small class="mu-muted">${sl.books.length} chosen</small></div></div>` : ''}`;
+}
+function rpgState() {
+    const wz = state.wizard, w = W();
+    if (!rpgOf(w) || playMode() !== 'rpg') return null;
+    const r = withRpg(systemOf()?.def ?? w.rpg, () => rpgOf(w))!;
+    if (wz.rpg && wz.rpgSys !== (systemOf()?.id ?? '')) wz.rpg = null;   // another system: start the sheet again
+    wz.rpgSys = systemOf()?.id ?? '';
+    if (!wz.rpg || !r.classes.some(c => c.id === wz.rpg.cls)) { const c = r.classes[0]; wz.rpg = { cls: c.id, attrs: defaultAttrs(r, c), skills: defaultSkills(r, c), free: wz.rpg?.free }; }
+    const s = wz.rpg as WzRpg;
+    return { wz, w, r, s, c: r.classes.find(k => k.id === s.cls)! };
+}
+const range = (x: NonNullable<ReturnType<typeof rpgState>>) => (x.s.free ? freeRange(x.r) : buyOf(x.r));
 function rpgHtml() {
     const x = rpgState(); if (!x) return '';
-    const { w, r, s } = x;
-    const c = r.classes.find(k => k.id === s.cls)!;
-    const left = POINTS - pointsUsed(s.attrs);
+    const { w, r, s, c } = x;
+    const b = buyOf(r), lim = range(x);
+    const left = b.points - pointsUsed(s.attrs, r);
     const origin = w.catalogs.origins?.find(o => o.id === state.wizard.hero.origin);
+    const fromOrigin = new Set(origin?.skills ?? []);
     const sk = (id: string) => r.skills.find(k => k.id === id)?.name ?? id;
-    return `<section class="mu-rpgmake"><h3>Your class</h3>
+    const sLeft = skillBudget(r) - skillsUsed(c, s.skills.filter(id => !fromOrigin.has(id)));
+    const chip = (id: string) => {
+        const on = s.skills.includes(id) || fromOrigin.has(id), cost = skillCost(c, id);
+        const off = !on && !s.free && cost > sLeft;
+        return `<button class="mu-chip ${on ? 'is-on' : ''}" data-act="ng-skill" data-id="${esc(id)}" ${fromOrigin.has(id) || off ? 'aria-disabled="true"' : ''} title="${fromOrigin.has(id) ? `From your background (${esc(origin!.name)})` : s.free ? '' : `Costs ${cost}`}">${esc(sk(id))}${s.free || fromOrigin.has(id) ? '' : `<small>${cost}</small>`}</button>`;
+    };
+    const others = r.skills.map(k => k.id).filter(id => !c.skills.includes(id));
+    const trainedNow = new Set([...s.skills, ...fromOrigin]);
+    const weapons = (r.weapons ?? []).filter(wp => !(c.weapon && wp.name === c.weapon.name));
+    const wpChip = (id: string, name: string, dice: string, skill: string | undefined, isClass: boolean) => {
+        const on = isClass ? !s.weapon || !weapons.some(k => k.id === s.weapon) : s.weapon === id;
+        const ok = isClass || !skill || trainedNow.has(skill);
+        return `<button class="mu-chip ${on ? 'is-on' : ''}" data-act="ng-weapon" data-id="${esc(isClass ? '' : id)}" title="${ok ? 'Trained: adds your proficiency' : `Not trained: learn ${esc(sk(skill!))} to add your proficiency`}">${esc(name)} <small>${dice}${ok ? ' ✓' : ''}</small></button>`;
+    };
+    return `<section class="mu-rpgmake">${systemHtml()}<h3>Your class</h3>
         <div class="mu-cards small">${r.classes.map(k => `<button class="mu-origin ${k.id === s.cls ? 'is-on' : ''}" data-act="ng-cls" data-id="${esc(k.id)}"><b>${esc(k.name)}</b><small>d${k.hit} hit points · ${esc(r.attributes.find(a => a.id === k.key)?.short ?? '')}${k.schools?.length ? ' · spells' : ''}</small><p>${esc(k.desc ?? '')}</p></button>`).join('')}</div>
-        <p class="mu-muted">Subclass at level ${c.subAt}: ${c.subclasses.map(x => esc(x.name)).join(', ')}.</p>
-        <h3>Attributes <small class="mu-muted">${left} of ${POINTS} points left · 8 to 15 each</small></h3>
-        <div class="mu-sheet-attrs is-make">${r.attributes.map(a => { const v = s.attrs[a.id] ?? 8, bonus = origin?.attributes?.[a.id] ?? 0; return `<div title="${esc(a.desc ?? '')}"><small>${esc(a.short)}</small><b>${v + bonus}</b><em>${mod(v + bonus) >= 0 ? '+' : ''}${mod(v + bonus)}</em>
-            <span><button class="mu-ibtn" data-act="ng-attr" data-id="${esc(a.id)}" data-d="-1" ${v <= 8 ? 'disabled' : ''}>−</button><button class="mu-ibtn" data-act="ng-attr" data-id="${esc(a.id)}" data-d="1" ${v >= 15 || (POINT_COST[v + 1] ?? 99) - (POINT_COST[v] ?? 0) > left ? 'disabled' : ''}>+</button></span>${bonus ? `<i>+${bonus} ${esc(origin!.name)}</i>` : ''}</div>`; }).join('')}</div>
-        <h3>Skills <small class="mu-muted">pick 2${origin?.skills?.length ? ` · ${esc(origin.name)} adds ${origin.skills.map(sk).join(', ')}` : ''}</small></h3>
-        <div class="mu-chips">${c.skills.map(id => `<button class="mu-chip ${s.skills.includes(id) ? 'is-on' : ''}" data-act="ng-skill" data-id="${esc(id)}">${esc(sk(id))}</button>`).join('')}</div>
+        ${c.subclasses.length ? `<p class="mu-muted">Subclass at level ${c.subAt}: ${c.subclasses.map(x => esc(x.name)).join(', ')}.</p>` : ''}
+        <label class="mu-check mu-rpg-free"><input type="checkbox" data-input="ng-rpg-free" ${s.free ? 'checked' : ''}><span>Unlimited<small>Every option open: set any score from ${freeRange(r).min} to ${freeRange(r).max} and take as many skills as you like. For a very specific character.</small></span></label>
+        <h3>Attributes <small class="mu-muted">${s.free ? `any score, ${lim.min} to ${lim.max}` : `${left} of ${b.points} points left · ${lim.min} to ${lim.max} each`}</small></h3>
+        <div class="mu-sheet-attrs is-make">${r.attributes.map(a => { const v = s.attrs[a.id] ?? lim.min, bonus = origin?.attributes?.[a.id] ?? 0; const up = s.free ? v < lim.max : v < lim.max && scoreCost(r, v + 1) - scoreCost(r, v) <= left; return `<div title="${esc(a.desc ?? '')}"><small>${esc(a.short)}</small><b>${v + bonus}</b><em>${mod(v + bonus) >= 0 ? '+' : ''}${mod(v + bonus)}</em>
+            <span><button class="mu-ibtn" data-act="ng-attr" data-id="${esc(a.id)}" data-d="-1" ${v <= lim.min ? 'disabled' : ''}>−</button><button class="mu-ibtn" data-act="ng-attr" data-id="${esc(a.id)}" data-d="1" ${up ? '' : 'disabled'}>+</button></span>${bonus ? `<i>+${bonus} ${esc(origin!.name)}</i>` : ''}</div>`; }).join('')}</div>
+        <h3>Skills <small class="mu-muted">${s.free ? `${trainedNow.size} picked · unlimited` : `${sLeft} of ${skillBudget(r)} points left · your class's skills cost 1, any other 2`}${origin?.skills?.length ? ` · ${esc(origin.name)} adds ${origin.skills.map(sk).join(', ')}` : ''}</small></h3>
+        <div class="mu-field"><span>${esc(c.name)} skills</span><div class="mu-chips mu-skillchips">${c.skills.map(chip).join('')}</div></div>
+        ${others.length ? `<div class="mu-field"><span>Other skills</span><div class="mu-chips mu-skillchips">${others.map(chip).join('')}</div></div>` : ''}
+        <p class="mu-muted">You learn another skill at levels 3, 5, 7 and so on, and from teachers and schools.</p>
+        ${c.weapon || weapons.length ? `<h3>Weapon <small class="mu-muted">✓ trained: adds your proficiency to attacks</small></h3>
+        <div class="mu-chips">${c.weapon ? wpChip('', `${c.weapon.name} (${c.name})`, `${c.weapon.dice}d${c.weapon.sides}`, undefined, true) : ''}${weapons.map(k => wpChip(k.id, k.name, `${k.dice}d${k.sides}${k.ranged ? ' · ranged' : ''}`, k.skill, false)).join('')}</div>` : ''}
         ${origin?.feature ? `<p class="mu-muted">${esc(origin.feature)}</p>` : ''}</section>`;
 }
 
@@ -198,6 +251,22 @@ function castMeter() {
     return `<div class="mu-castmeter"><b class="${cls}">${n} ${n === 1 ? 'person' : 'people'} · ${esc(c.level)}</b><small class="mu-muted">${esc(c.tip)} Neighbors need ${NEIGHBORS_MIN} people living in your area.</small></div>`;
 }
 
+// The world's own people (written with the world, or read from its lorebooks): Mundi makes their cards when the game
+// starts, and can draw their sprites with ComfyUI (their card picture then comes from their first sprite).
+function examplesHtml() {
+    const wz = state.wizard, w = W(), ex = w.cast.examples;
+    if (!ex.length) return '';
+    const spriteAvatar = (settings() as any).sprites?.avatar !== false;
+    const had = ex.filter(e => characters().some(c => c.data?.extensions?.mundi?.example === exampleTag(w, e))).length;
+    const names = ex.slice(0, 8).map(e => e.name).join(', ') + (ex.length > 8 ? ` and ${ex.length - 8} more` : '');
+    const made = had === ex.length ? 'They all have a card from an earlier game, which is used again.'
+        : `Mundi makes a card for ${had ? `the ${ex.length - had} without one` : 'each of them'} when the game starts${had ? ' (the others have one from an earlier game)' : ''}, with an initials picture.`;
+    return `<div class="mu-ng-examples">
+        <label class="mu-check"><input type="checkbox" data-input="ng-examples" ${wz.examples ? 'checked' : ''}><span>Add this world's own people (${ex.length})<small><span data-notr>${esc(names)}</span>. ${made}</small></span></label>
+        ${wz.examples ? `<label class="mu-check"><input type="checkbox" data-input="ng-ex-draw" ${wz.exDraw ? 'checked' : ''}><span>Draw their pictures and sprites with ComfyUI<small>One at a time in the background once the game starts: everyone's neutral sprite first${spriteAvatar ? ', which also becomes their card picture' : ''}, then their other expressions. Uses the workflow and server set in Settings, Sprites.${spriteAvatar ? '' : ' Their card pictures stay the initials ones: "Give the world\'s people a card picture from their sprite" is off there.'}</small></span></label>` : ''}
+    </div>`;
+}
+
 // Your character: one you already have (a SillyTavern persona) or a new one.
 function stepHeroChoice() {
     return `<div class="mu-heropick is-modes">
@@ -213,7 +282,55 @@ function stepHeroExisting() {
         <div class="mu-castgrid" data-keep="personas">${list.length ? list.map(p => `
             <button class="mu-castcard ${wz.persona === p.file ? 'is-on' : ''}" data-act="ng-persona" data-file="${esc(p.file)}" title="${esc(p.name)}">
                 <img src="${esc(personaThumb(p.file))}" alt="" loading="lazy"><span data-notr>${esc(p.name)}</span><i>✓</i></button>`).join('') : '<p class="mu-muted">You have no personas yet.</p>'}</div>
-        ${wz.persona ? `<p class="mu-muted mu-persona-desc" data-notr>${esc(personas().find(p => p.file === wz.persona)?.description.slice(0, 400) ?? '')}</p>` : ''}`;
+        ${wz.persona ? `<p class="mu-muted mu-persona-desc" data-notr>${esc(personas().find(p => p.file === wz.persona)?.description.slice(0, 400) ?? '')}</p>${fillHtml()}` : ''}`;
+}
+
+// "Fill from my persona": your AI reads the persona (its description, its lorebook, lorebooks you add, a chat you
+// played it in) and fills in this page: origin, about you, traits, class, attributes, weapon, money, who knows you, meters.
+const fillOf = () => {
+    const wz = state.wizard;
+    if (wz.fill?.persona !== wz.persona) {   // another persona: its own lorebooks, the ones named after it picked
+        const p = personas().find(x => x.file === wz.persona), first = String(p?.name ?? '').split(/\s+/)[0].toLowerCase(), own = personaLore(wz.persona);
+        wz.fill = { persona: wz.persona, open: false, busy: false, bq: '', books: first.length > 2 ? lorebooks().filter(b => b !== own && b.toLowerCase().includes(first)) : [], cq: '', who: '', chats: null, chat: '', done: null as null | { fill: Fill; meters: any[] } };
+    }
+    return wz.fill;
+};
+function fillHtml() {
+    const f = fillOf(), p = personas().find(x => x.file === state.wizard.persona); if (!p) return '';
+    const own = personaLore(p.file);
+    if (!f.open) return `<section class="mu-panel mu-fill"><div class="mu-row"><button class="mu-primary" data-act="ng-fill-open">${icon('sparkles')}<span>Fill from my persona</span></button>
+        <small class="mu-muted">Your AI reads <span data-notr>${esc(p.name)}</span>${own ? ` and the lorebook <span data-notr>${esc(own)}</span>` : ''} (and a chat, if you pick one) and fills in your origin, about you, ${rpgState() ? 'class, attributes, weapon, ' : ''}money, the people who already know you and your own meters.</small></div>${f.done ? fillDoneHtml(f) : ''}</section>`;
+    const books = lorebooks().filter(b => b !== own && (!f.bq || b.toLowerCase().includes(String(f.bq).toLowerCase()))).sort((a, b) => Number(f.books.includes(b)) - Number(f.books.includes(a)) || a.localeCompare(b));
+    const cq = String(f.cq ?? '').toLowerCase();
+    const chars = cq.length > 1 ? characters().filter(c => String(c.name).toLowerCase().includes(cq)).slice(0, 12) : [];
+    const who = f.who ? charOf(f.who) : null;
+    return `<section class="mu-panel mu-fill"><h4>${icon('sparkles')} Fill from my persona</h4>
+        <p class="mu-muted">Your AI reads <span data-notr>${esc(p.name)}</span>'s description${own ? ` and lorebook (<span data-notr>${esc(own)}</span>)` : ''}, plus what you pick here, and fills in this page. You can change everything afterwards.</p>
+        <div class="mu-field"><span>More lorebooks about you (a campaign ledger…)</span>
+            <input class="mu-search" type="search" data-input="ng-fill-bq" data-focus="ngfillbq" placeholder="Search lorebooks" value="${esc(f.bq)}">
+            <div class="mu-chips mu-situation-books">${books.slice(0, 40).map(b => `<button class="mu-chip ${f.books.includes(b) ? 'is-on' : ''}" data-act="ng-fill-book" data-name="${esc(b)}" data-notr>${esc(b)}</button>`).join('') || '<span class="mu-muted">No lorebooks.</span>'}</div></div>
+        <div class="mu-field"><span>A chat you played as <span data-notr>${esc(p.name)}</span> (optional: where you left off, from its latest status)</span>
+            ${who ? `<div class="mu-row"><span class="mu-chip is-on" data-notr>${esc(who.name)}</span><button class="mu-ghost" data-act="ng-fill-who" data-id="">${icon('x')}<span>Another character</span></button></div>
+                <div class="mu-chips">${f.chats === null ? '<span class="mu-muted">Reading the chats…</span>' : f.chats.length ? f.chats.slice(0, 12).map((c: any) => `<button class="mu-chip ${f.chat === c.file ? 'is-on' : ''}" data-act="ng-fill-chat" data-file="${esc(c.file)}" title="${esc(c.last)}" data-notr>${esc(c.file.replace(/\.jsonl$/, ''))} <small>${c.count}</small></button>`).join('') : '<span class="mu-muted">No chats with this character.</span>'}</div>`
+            : `<input class="mu-search" type="search" data-input="ng-fill-cq" data-focus="ngfillcq" placeholder="Search the character you chatted with" value="${esc(f.cq)}">
+                ${chars.length ? `<div class="mu-chips">${chars.map(c => `<button class="mu-chip" data-act="ng-fill-who" data-id="${esc(c.avatar)}" data-notr>${esc(c.name)}</button>`).join('')}</div>` : ''}`}</div>
+        <div class="mu-row"><button class="mu-primary" data-act="ng-fill-go" ${f.busy ? 'aria-disabled="true"' : ''}>${icon('sparkles')}<span>${f.busy ? 'Reading…' : f.done ? 'Fill it in again' : 'Fill it in'}</span></button><button class="mu-ghost" data-act="ng-fill-close">Close</button>
+            <small class="mu-muted">${[own ? 1 : 0, f.books.length].reduce((a, b) => a + b, 0)} lorebook(s)${f.chat ? ' and a chat' : ''}</small></div>
+        ${f.done ? fillDoneHtml(f) : ''}</section>`;
+}
+// What the AI filled in, and your meters (which you can remove or add to).
+function fillDoneHtml(f: any) {
+    const d: Fill = f.done.fill, w = W();
+    const origin = w.catalogs.origins?.find(o => o.id === d.origin);
+    const meters: any[] = state.wizard.meters ?? [];
+    const outCards = (state.wizard.fillCards ?? []) as { avatar: string; name: string }[];
+    return `<div class="mu-fill-done">
+        <p><b>Filled in:</b> ${[origin ? `origin ${esc(origin.name)}` : '', d.background ? `background “${esc(d.background)}”` : '', d.bio ? 'about you' : '', Object.keys(d.traits).length ? 'traits' : '', d.cls || d.newClass ? `class ${esc(d.newClass?.name ?? rpgState()?.r.classes.find(c => c.id === d.cls)?.name ?? '')}${d.newClass ? ' (made for you)' : ''}` : '', Object.keys(d.attrs).length ? 'attributes' : '', d.weapon || d.newWeapon ? 'weapon' : '', d.gear.length ? `${d.gear.length} belongings (in about you)` : '', d.money !== undefined ? `money ${esc(money(w, d.money))}` : '', d.home ? `home: ${esc(d.home.room || 'a room')} in ${esc(w.places.find(p => p.id === d.home!.place)?.name ?? '')}` : ''].filter(Boolean).join(' · ') || 'nothing the world could use'}.</p>
+        ${d.people.length ? `<p><b>Already know you</b> (they start as people you have met): <span data-notr>${esc(d.people.map(x => x.name).join(', '))}</span>.</p>` : ''}
+        ${outCards.length ? `<p><b>Have a card but are not in this game:</b> ${outCards.map(c => `<button class="mu-chip" data-act="ng-fill-addcard" data-id="${esc(c.avatar)}" title="Add to this game">${icon('plus')} <span data-notr>${esc(c.name)}</span></button>`).join(' ')}</p>` : ''}
+        ${d.missing.length ? `<p class="mu-muted">Also know you, with no card here: <span data-notr>${esc(d.missing.join(', '))}</span> (noted in about you).</p>` : ''}
+        <div class="mu-field"><span>Your own meters (shown in the HUD; the AI keeps them up to date)</span><div class="mu-chips">${meters.map((m, i) => `<span class="mu-chip is-on" title="${esc(m.note ?? '')}"><span data-notr>${esc(m.name)}</span> <small>${esc(meterWord(m))}</small><button class="mu-ibtn" data-act="ng-meter-x" data-i="${i}" title="Remove">${icon('x')}</button></span>`).join('') || '<span class="mu-muted">None.</span>'}</div>
+            <div class="mu-row"><input data-input="ng-meter-f" data-k="name" data-focus="ngmname" maxlength="30" placeholder="Name (Warmth)" value="${esc(f.mName ?? '')}"><input data-input="ng-meter-f" data-k="value" type="number" placeholder="Now" value="${esc(f.mValue ?? '')}"><input data-input="ng-meter-f" data-k="max" type="number" placeholder="Max (optional)" value="${esc(f.mMax ?? '')}"><button data-act="ng-meter-add">${icon('plus')}<span>Add</span></button></div></div></div>`;
 }
 
 function stepHero() {
@@ -329,7 +446,7 @@ function canGo(step: Step): string {
         if (!wz.heroMode) return 'Choose how you want to play.';
         if (wz.heroMode === 'existing') { if (!wz.persona) return 'Choose one of your personas.'; }
         else if (!wz.hero.name.trim()) return 'Choose a name for your character.';
-        const x = rpgState(); if (x && x.s.skills.length < 2) return 'Pick 2 skills for your class.';
+        const x = rpgState(); if (x && !x.s.skills.length && !(W().catalogs.origins?.find(o => o.id === wz.hero.origin)?.skills?.length)) return 'Pick at least one skill.';
     }
     return '';
 }
@@ -393,14 +510,97 @@ export function newGameHtml() {
     </div>`;
 }
 
+// The people the AI can match: the cards chosen for this game, the world's own people, and your other cards.
+function fillPeople() {
+    const wz = state.wizard, w = W();
+    const inCast = wz.cast.map((a: string) => ({ key: a, name: String(charOf(a)?.name ?? '') }));
+    const ex = wz.examples ? w.cast.examples.map(e => ({ key: `ex:${e.name}`, name: e.name })) : [];
+    const others = characters().filter(c => !wz.cast.includes(c.avatar)).map(c => ({ key: `card:${c.avatar}`, name: String(c.name ?? '') }));
+    return [...inCast, ...ex, ...others].filter(x => x.name);
+}
+// Puts what the AI filled in into the page (your sheet, and a system of your own when it made you a class or weapon).
+function applyFill(d: Fill) {
+    const wz = state.wizard, h: Hero = wz.hero;
+    if (d.origin) h.origin = d.origin;
+    for (const [k, v] of Object.entries(d.traits)) h.traits[k] = v;
+    h.bio = fillBio(d);
+    wz.meters = d.meters.map(m => ({ ...m }));
+    if (d.home) { const h = homeInside(W(), d.home.place, d.home.room); if (h) { wz.home = h; wz.homeRoom = h.room; } }
+    wz.money = d.money;
+    wz.known = d.people.filter(p => !p.key.startsWith('card:')).map(p => ({ name: p.name, approval: p.approval }));
+    wz.fillCards = d.people.filter(p => p.key.startsWith('card:')).map(p => ({ avatar: p.key.slice(5), name: p.name, approval: p.approval }));
+    let x = rpgState(); if (!x) return;
+    if (d.newClass || d.newWeapon) {   // a class or weapon made for you: a copy of the system with it, saved to your systems
+        const base = systemOf()!, def: RpgDef = structuredClone(x.r);
+        const pname = personas().find(p => p.file === wz.persona)?.name ?? 'you';
+        if (d.newClass) {
+            const id = `own-${d.newClass.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 40);
+            def.classes = [...def.classes.filter(c => c.id !== id), { id, name: d.newClass.name, desc: d.newClass.desc, hit: 8, key: d.newClass.key, skills: d.skills.slice(0, 4).length ? d.skills.slice(0, 4) : def.skills.slice(0, 4).map(k => k.id), subAt: 3, subclasses: [] }];
+            d.cls = id;
+        }
+        if (d.newWeapon) {
+            const id = `own-${d.newWeapon.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 40);
+            def.weapons = [...(def.weapons ?? []).filter(k => k.id !== id), { id, ...d.newWeapon }];
+            d.weapon = id;
+        }
+        const sys = { id: `fill-${Date.now()}`, name: `${def.name ?? base.name} · ${pname}`, desc: `${base.name}, with ${[d.newClass ? `the class ${d.newClass.name}` : '', d.newWeapon ? `the weapon ${d.newWeapon.name}` : ''].filter(Boolean).join(' and ')} made for ${pname}.`, def };
+        (settings().rpgSystems ??= []).push(sys as any); saveSettings();
+        wz.system = sys.id; wz.rpg = null;
+        x = rpgState(); if (!x) return;
+    }
+    const c = x.r.classes.find(k => k.id === d.cls) ?? x.c;
+    const attrs = { ...defaultAttrs(x.r, c), ...d.attrs };
+    const free = !!Object.keys(d.attrs).length && (pointsUsed(attrs, x.r) > buyOf(x.r).points || Object.values(attrs).some(v => v < buyOf(x!.r).min || v > buyOf(x!.r).max));
+    x.wz.rpg = { cls: c.id, attrs, skills: d.skills.length ? fitSkills(x.r, c, d.skills, free || x.s.free) : defaultSkills(x.r, c), free: free || x.s.free, weapon: d.weapon };
+}
+
 Object.assign(ACT, {
+    'ng-fill-open': () => { fillOf().open = true; notify(); },
+    'ng-fill-close': () => { fillOf().open = false; notify(); },
+    'ng-fill-book': (el) => { const f = fillOf(), n = el.dataset.name!; f.books = f.books.includes(n) ? f.books.filter((b: string) => b !== n) : [...f.books, n]; notify(); },
+    'ng-fill-who': async (el) => {
+        const f = fillOf(); f.who = el.dataset.id || ''; f.chat = ''; f.chats = f.who ? null : []; notify();
+        if (!f.who) return;
+        const who = f.who, list = await characterChats(who);
+        if (fillOf().who !== who) return;
+        f.chats = list.sort((a, b) => b.file.localeCompare(a.file)); f.chat = f.chats[0]?.file ?? ''; notify();
+    },
+    'ng-fill-chat': (el) => { const f = fillOf(); f.chat = f.chat === el.dataset.file ? '' : el.dataset.file!; notify(); },
+    'ng-fill-go': async () => {
+        const f = fillOf(), wz = state.wizard; if (f.busy || !wz.persona) return;
+        f.busy = true; notify();
+        try {
+            const x = rpgState();
+            const chat = f.who && f.chat ? await readCharChat(f.who, f.chat) : undefined;
+            const d = await fillFromPersona({ file: wz.persona, world: W(), rpg: x?.r ?? null, range: x ? freeRange(x.r) : undefined, people: fillPeople(), books: f.books, chat });
+            applyFill(d);
+            f.done = { fill: d };
+            toast('Filled in from your persona. Check it and change what you like.', 'success');
+        } catch (e: any) { console.error('[Mundi] fill from persona', e); toast(String(e?.message ?? e), 'error'); }
+        f.busy = false; notify();
+    },
+    'ng-fill-addcard': (el) => {
+        const wz = state.wizard, a = el.dataset.id!; const c = (wz.fillCards ?? []).find((x: any) => x.avatar === a); if (!c) return;
+        if (!wz.cast.includes(a)) wz.cast = [...wz.cast, a];
+        wz.fillCards = wz.fillCards.filter((x: any) => x.avatar !== a);
+        (wz.known ??= []).push({ name: c.name, approval: c.approval });
+        toast(`${c.name} is in this game now.`, 'success'); notify();
+    },
+    'ng-meter-x': (el) => { const l = state.wizard.meters ?? []; l.splice(Number(el.dataset.i), 1); notify(); },
+    'ng-meter-add': () => {
+        const f = fillOf(), wz = state.wizard;
+        const add = makeMeters([...(wz.meters ?? []), { name: f.mName, value: f.mValue, max: f.mMax }]);
+        if (add.length === (wz.meters ?? []).length) { toast('Give the meter a new name.', 'info'); return; }
+        wz.meters = add; f.mName = f.mValue = f.mMax = ''; notify();
+    },
     'ng-world-new': () => openCreatorNew(styleOf(W()), state.wizard.mode === 'scenario'),
     'ng-world-edit': (el) => openCreatorEdit(el.dataset.id!),
     'ng-world-import': async () => { const w = await importWorldFile(); if (w) { state.wizard.world = w.id; state.wizard.hero = freshHero(w); notify(); } },
     'ng-diff': (el) => { state.wizard.difficulty = el.dataset.v; notify(); },
     'ng-heromode': (el) => { state.wizard.heroMode = el.dataset.v || null; notify(); },
     'ng-persona': (el) => {
-        const wz = state.wizard; wz.persona = el.dataset.file;
+        const wz = state.wizard; if (wz.persona !== el.dataset.file) { wz.meters = []; wz.money = undefined; wz.known = []; wz.fillCards = []; }
+        wz.persona = el.dataset.file;
         const sheet = personaSheet(wz.persona!); const w = W();
         if (sheet && sheet.world === w.id) { wz.hero.traits = JSON.parse(JSON.stringify(sheet.traits ?? {})); if (w.catalogs.origins?.some(o => o.id === sheet.origin)) wz.hero.origin = sheet.origin; wz.hero.bio = sheet.bio ?? ''; }
         notify();
@@ -481,15 +681,42 @@ Object.assign(ACT, {
     },
     'ng-origin': (el) => { state.wizard.hero.origin = el.dataset.id; notify(); },
     'ng-play': (el) => { state.wizard.play = el.dataset.v; notify(); },
-    'ng-cls': (el) => { const x = rpgState(); if (!x) return; const c = x.r.classes.find(k => k.id === el.dataset.id); if (!c) return; x.wz.rpg = { cls: c.id, attrs: defaultAttrs(x.r, c), skills: c.skills.slice(0, 2) }; notify(); },
+    'ng-cls': (el) => { const x = rpgState(); if (!x) return; const c = x.r.classes.find(k => k.id === el.dataset.id); if (!c) return; x.wz.rpg = { cls: c.id, attrs: defaultAttrs(x.r, c), skills: defaultSkills(x.r, c), free: x.s.free }; notify(); },
     'ng-attr': (el) => {
-        const x = rpgState(); if (!x) return; const id = el.dataset.id!, d = Number(el.dataset.d);
-        const v = (x.s.attrs[id] ?? 8) + d; if (v < 8 || v > 15) return;
-        const next = { ...x.s.attrs, [id]: v }; if (pointsUsed(next) > POINTS) return;
+        const x = rpgState(); if (!x) return; const id = el.dataset.id!, d = Number(el.dataset.d); const lim = range(x);
+        const v = (x.s.attrs[id] ?? lim.min) + d; if (v < lim.min || v > lim.max) return;
+        const next = { ...x.s.attrs, [id]: v }; if (!x.s.free && pointsUsed(next, x.r) > buyOf(x.r).points) return;
         x.s.attrs = next; notify();
     },
-    'ng-skill': (el) => { const x = rpgState(); if (!x) return; const id = el.dataset.id!; const l = x.s.skills; x.s.skills = l.includes(id) ? l.filter(k => k !== id) : [...l, id].slice(-2); notify(); },
+    'ng-skill': (el) => {
+        const x = rpgState(); if (!x) return; const id = el.dataset.id!; const l = x.s.skills;
+        const given = new Set(x.w.catalogs.origins?.find(o => o.id === state.wizard.hero.origin)?.skills ?? []);
+        x.s.skills = l.includes(id) ? l.filter(k => k !== id) : fitSkills(x.r, x.c, [...l.filter(k => !given.has(k)), id], x.s.free);
+        notify();
+    },
+    'ng-system': (el) => { state.wizard.system = el.dataset.id; state.wizard.rpg = null; notify(); },
+    'ng-system-lore': () => { const sl = sysLore(); sl.open = !sl.open; notify(); },
+    'ng-system-del': (el) => {
+        const l = settings().rpgSystems ?? []; const i = l.findIndex(x => x.id === el.dataset.id); if (i < 0) return;
+        const [x] = l.splice(i, 1); saveSettings();
+        if (state.wizard.system === x.id) { state.wizard.system = undefined; state.wizard.rpg = null; }
+        toast(`Deleted "${x.name}".`, 'info'); notify();
+    },
+    'ng-syslore-book': (el) => { const sl = sysLore(), n = el.dataset.name!; sl.books = sl.books.includes(n) ? sl.books.filter((b: string) => b !== n) : [...sl.books, n]; notify(); },
+    'ng-syslore-go': async () => {
+        const sl = sysLore(); if (sl.busy || !sl.books.length) return;
+        sl.busy = true; notify();
+        try {
+            const x = await systemFromLore(sl.books, sl.hint);
+            (settings().rpgSystems ??= []).push(x); saveSettings();
+            if (state.wizard) { state.wizard.system = x.id; state.wizard.rpg = null; sl.open = false; }
+            toast(`"${x.name}" is ready: ${x.def.classes.length} classes, ${x.def.spells.length} powers. Saved to your systems.`, 'success');
+        } catch (e: any) { console.error('[Mundi] system from lore', e); toast(String(e?.message ?? e), 'error'); }
+        sl.busy = false; notify();
+    },
+    'ng-weapon': (el) => { const x = rpgState(); if (!x) return; x.s.weapon = el.dataset.id || undefined; notify(); },
     'ng-trait': (el) => { toggleTrait(W().sheet.traits ?? [], state.wizard.hero.traits, el.dataset.k!, el.dataset.v!); notify(); },
+    'ng-trait-own': (el) => { if (addOwnTrait(W().sheet.traits ?? [], state.wizard.hero.traits, el)) notify(); },
     'ng-portrait': async () => {
         const blob = await pickAndCrop();
         if (!blob) return;
@@ -498,12 +725,19 @@ Object.assign(ACT, {
     },
     'ng-portrait-clear': () => { state.wizard.hero.portrait = null; state.wizard.portraitUrl = ''; notify(); },
     'ng-start': async () => {
-        const wz = state.wizard;
+        const wz = state.wizard, w = W();
         try {
             await startNewGame({ world: W(), cast: wz.cast, examples: wz.examples, hero: { ...wz.hero, name: wz.hero.name.trim() }, persona: wz.heroMode === 'existing' ? wz.persona : undefined, lore: chosenLore(),
                 households: (wz.hh ?? []).filter((h: any) => h.members.length), family: wz.family ?? [], home: wz.home ?? undefined, difficulty: wz.difficulty ?? 'normal',
-                approval: wz.approval ?? undefined, ties: (wz.rels ?? []).filter((t: any) => t.a !== t.b), mode: rpgOf(W()) ? playMode() as any : undefined, rpg: rpgState()?.s, memoriesFrom: wz.memories || undefined, jobs: wz.jobs ?? undefined, rooms: isScenario(W()) ? roomsOf() : undefined, extraRooms: isScenario(W()) ? extraOf() : undefined, roomActs: isScenario(W()) ? wz.roomActs : undefined, start: isScenario(W()) ? { id: startOf().id, text: startOf().text } : undefined });
+                approval: wz.approval ?? undefined, ties: (wz.rels ?? []).filter((t: any) => t.a !== t.b), mode: rpgOf(W()) ? playMode() as any : undefined, rpg: rpgState()?.s, rpgDef: rpgState() ? chosenDef() : undefined, memoriesFrom: wz.memories || undefined, jobs: wz.jobs ?? undefined,
+                ...(wz.heroMode === 'existing' && wz.persona ? { meters: wz.meters ?? [], money: wz.money, known: wz.known ?? [] } : {}), rooms: isScenario(W()) ? roomsOf() : undefined, extraRooms: isScenario(W()) ? extraOf() : undefined, roomActs: isScenario(W()) ? wz.roomActs : undefined, start: isScenario(W()) ? { id: startOf().id, text: startOf().text } : undefined });
             state.wizard = null;
+            if (wz.examples && wz.exDraw) {   // the world's people: their sprites, and from them their card pictures
+                const mine = characters().filter(c => w.cast.examples.some(e => exampleTag(w, e) === c.data?.extensions?.mundi?.example)).map(c => c.avatar);
+                const sg = await import('./spritegen.js');
+                const n = sg.drawEveryone(mine);
+                if (n) toast(`Drawing ${n === 1 ? '1 person' : `${n} people`} with ComfyUI in the background.`, 'info');
+            }
         } catch (e: any) {
             console.error('[Mundi] new game', e);
             toast(e?.message ?? 'Could not start the game.', 'error');
@@ -513,6 +747,19 @@ Object.assign(ACT, {
 
 Object.assign(INPUT, {
     'ng-examples': (el) => { state.wizard.examples = el.checked; notify(); },
+    'ng-fill-bq': (el) => { fillOf().bq = el.value; notify(); },
+    'ng-fill-cq': (el) => { fillOf().cq = el.value; notify(); },
+    'ng-meter-f': (el) => { const f = fillOf(), k = el.dataset.k; if (k === 'name') f.mName = el.value; else if (k === 'value') f.mValue = el.value; else f.mMax = el.value; },
+    'ng-ex-draw': (el) => { state.wizard.exDraw = el.checked; },
+    'ng-rpg-free': (el) => {
+        const x = rpgState(); if (!x) return; x.s.free = (el as HTMLInputElement).checked;
+        if (!x.s.free) {   // back to the budget: the defaults if what you set no longer fits
+            const b = buyOf(x.r);
+            if (Object.values(x.s.attrs).some(v => v < b.min || v > b.max) || pointsUsed(x.s.attrs, x.r) > b.points) x.s.attrs = defaultAttrs(x.r, x.c);
+            x.s.skills = fitSkills(x.r, x.c, x.s.skills);
+        }
+        notify();
+    },
     'ng-mem': (el) => { state.wizard.memories = el.value; },
     'ng-q': (el) => { state.wizard.q = el.value; notify(); },
     'ng-pq': (el) => { state.wizard.pq = el.value; notify(); },
@@ -532,4 +779,6 @@ Object.assign(INPUT, {
     },
     'ng-start-text': (el) => { startOf().text = el.value; },
     'ng-start-bq': (el) => { startOf().bq = el.value; notify(); },
+    'ng-syslore-bq': (el) => { sysLore().bq = el.value; notify(); },
+    'ng-syslore-hint': (el) => { sysLore().hint = el.value; },
 });

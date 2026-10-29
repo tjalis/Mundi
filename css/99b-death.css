@@ -1,0 +1,19 @@
+/* Death (RPG, death being real): the screen when it is over, and a dead fighter on the fight screen. */
+#mundi-root .mu-death-veil { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(40, 6, 10, .88), rgba(0, 0, 0, .96)); animation: mu-fade 1.2s; }
+#mundi-root .mu-death { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 12px; text-align: center; color: #eadfdc; }
+#mundi-root .mu-death h2 { margin: 0; font-size: clamp(34px, 8vw, 56px); letter-spacing: 6px; text-transform: uppercase; color: #c9343d; text-shadow: 0 0 24px rgba(201, 52, 61, .45); }
+#mundi-root .mu-death-when { margin: 0; font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; opacity: .7; }
+#mundi-root .mu-death-text { margin: 4px 0; line-height: 1.55; font-size: 15px; }
+#mundi-root .mu-death-graves { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+#mundi-root .mu-death-graves h4 { margin: 0 0 2px; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; opacity: .7; }
+#mundi-root .mu-death-graves small { opacity: .65; }
+#mundi-root .mu-death-btns { display: grid; gap: 8px; margin-top: 6px; }
+#mundi-root .mu-death-btns button { display: grid; gap: 2px; padding: 12px 14px; text-align: left; border-radius: 12px; }
+#mundi-root .mu-death-btns button small { font-weight: 400; opacity: .75; }
+#mundi-root .mu-pkb-sprite.is-dead { filter: grayscale(1) brightness(.45); opacity: .25; transform: rotate(-90deg) translateY(20%); }
+#mundi-root .mu-death-heirs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 14px 0; }
+#mundi-root .mu-death-heirs button { display: grid; justify-items: center; gap: 4px; padding: 10px 8px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .05); color: inherit; cursor: pointer; }
+#mundi-root .mu-death-heirs button:hover { border-color: rgba(255, 200, 200, .45); background: rgba(255, 255, 255, .09); }
+#mundi-root .mu-death-heirs img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+#mundi-root .mu-death-heirs small { opacity: .7; font-size: 11px; }
+#mundi-root .mu-death-rise { border-color: rgba(170, 190, 255, .55) !important; background: linear-gradient(180deg, rgba(120, 140, 220, .28), rgba(40, 50, 90, .35)) !important; }

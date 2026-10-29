@@ -6,7 +6,7 @@ import { state, notify, esc, game, toast, busy, settings, saveSettings, type Lib
 import { getWorld, loadWorld, BUILT_IN, activeStatuses, worlds } from '../core/world.js';
 import {
     ctx, characters, charOf, thumb, fullCharacter, saveCharacter, personas, savePersona, personaThumb, persona,
-    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, selectedGroup, bindChatLore, type CardPatch,
+    lorebooks, loadLore, saveLore, newLoreEntry, chatLore, groupOf, bindChatLore, type CardPatch,
     charLorebooks, setCharLorebooks, importCharacterFiles, importLorebookFiles, importPersonaPictures, folders, tagIdsOf, newFolder, putInFolder, isFav, setFavorite, deleteCharacters, deletePersonas, deleteLorebooks,
     createCharacter, createPersona, createLorebook, duplicateCharacter, duplicatePersona, duplicateLorebook,
     setCharacterImage, setPersonaImage, defaultPersona, setDefaultPersona, personaSheet, setPersonaSheet,
@@ -14,7 +14,10 @@ import {
     bgList, bgThumb, bgUrl, bgUpload, bgRename, bgDelete, bgFolderCreate, bgFolderPut, type Bgs,
     refreshList, folderColor, setFolderColor, deleteFolder, personaLore, setPersonaLore, exportCharacter, cardFile, fileNameOf, baseSpriteFolder, loreCount, charTags, tagColor, tagCharacter, untagCharacter, allTags, cardTokens, cachedTokens, folderMade, renameFolder, characterChats, useGreeting, openCharacter,
 } from '../st/bridge.js';
-import { gameEntry, heroDescription, initialsAvatar } from '../sim/game.js';
+import { currentEntry, heroDescription, initialsAvatar } from '../sim/game.js';
+import { mundify, mundifiedOf, madeForMundi, mundiCopies, hasStyle, addStyle } from '../sim/mundify.js';
+import { mundifyLore, loreMundifiedOf, loreCopies } from '../sim/mundifylore.js';
+import { mundifyPersona, personaMundifiedOf, personaCopies } from '../sim/mundifypersona.js';
 import { sceneText } from '../sim/prompt.js';
 import { ACT, INPUT } from './reg.js';
 import { leaveHtml } from './creator.js';
@@ -25,6 +28,7 @@ import { pickAndCrop, pickFile } from './cropper.js';
 import { toggleTrait } from './traits.js';
 import { nativeHost } from './native.js';
 import { presetsTabHtml } from './castpresets.js';
+import { spriteLookHtml, spriteTileButton, checkSprites, spriteStatus, drawEveryone, personaKey, CG_FOLDER, cgPositions, hasCgPage } from './spritegen.js';
 
 const L = state.lib;
 type Tab = 'characters' | 'personas' | 'lorebooks' | 'backgrounds' | 'presets' | 'save' | 'world' | 'st-characters' | 'st-personas' | 'st-worldinfo';
@@ -89,18 +93,28 @@ const FAV = {
 
 /* ---------- the items of each list ---------- */
 
-interface Item { id: string; name: string; img: string; fav: boolean; crown?: boolean }
+interface Item { id: string; name: string; img: string; fav: boolean; crown?: boolean; mfy?: boolean }
 const match = (name: string) => !L.q || name.toLowerCase().includes(L.q.toLowerCase());
-const isMundiCard = (c: any) => !!c.data?.extensions?.mundi || c.creator === 'Mundi' || c.data?.creator === 'Mundi';
 
 function items(tab: ListTab): Item[] {
     let list: Item[];
-    if (tab === 'characters') list = characters().map(c => ({ id: c.avatar, name: String(c.name ?? ''), img: thumb(c.avatar), fav: isFav(c) }));
+    if (tab === 'characters') list = characters().map(c => ({ id: c.avatar, name: String(c.name ?? ''), img: thumb(c.avatar), fav: isFav(c), mfy: !!mundifiedOf(c) }));
     else if (tab === 'personas') { const d = defaultPersona(); list = personas().map(p => ({ id: p.file, name: p.name, img: personaThumb(p.file), fav: FAV.is(tab, p.file), crown: p.file === d })); }
     else if (tab === 'backgrounds') { if (!B()) { loadBgs(); return []; } list = B()!.images.map(f => ({ id: f, name: f.replace(/\.[^.]+$/, ''), img: bgThumb(f), fav: false })); }
-    else list = lorebooks().map(n => ({ id: n, name: n, img: '', fav: FAV.is(tab, n) }));
-    return sortItems(tab, list.filter(i => match(i.name) && (!L.favOnly || i.fav)));
+    else list = lorebooks().map(n => ({ id: n, name: n, img: '', fav: FAV.is(tab, n), mfy: !!loreMundifiedOf(n) }));
+    list = list.filter(i => match(i.name) && (!L.favOnly || i.fav) && (!MF.on || (tab !== 'characters' && tab !== 'lorebooks') || i.mfy));
+    if (NS.on && (tab === 'characters' || tab === 'personas')) {
+        const key = (i: Item) => (tab === 'personas' ? personaKey(i.id) : i.id);
+        checkSprites(list.map(key));
+        list = list.filter(i => { const st = spriteStatus(key(i)); return !!st && st !== 'has'; });
+    }
+    return sortItems(tab, list);
 }
+// The "No sprites" filter: only the characters (or personas) whose Expressions folder is empty.
+const NS = { on: false };
+// The "Mundified" filter: only the mundified copies (characters and lorebooks).
+const MF = { on: false };
+const sprKey = (tab: ListTab, id: string) => (tab === 'personas' ? personaKey(id) : id);
 
 /* ---------- sorting the list (favorites stay on top) ---------- */
 
@@ -160,7 +174,7 @@ function field(label: string, key: string, value: any, kind: 'text' | 'area' | '
 }
 const advHead = () => `<h4 class="mu-lib-advhead">Advanced settings</h4>`;
 const dirty = () => Object.keys(L.draft).length > 0;
-// The action bar under a card: Save (while editing), Duplicate, Expressions (characters), Delete, side by side.
+// The action bar under a card: Save (while editing), Duplicate, Expressions (characters, personas), Delete, side by side.
 function actionBar(o: { save?: boolean; dup?: string; expr?: boolean; del?: string | null } = {}) {
     const save = o.save ?? L.edit;
     return `<div class="mu-lib-savebar">
@@ -196,10 +210,10 @@ function charDetail(avatar: string) {
     const c = charOf(avatar);
     if (!c) return '<p class="mu-muted mu-pad">This character no longer exists.</p>';
     const d = c.data ?? {}; const ext = d.extensions ?? {}; const dp = ext.depth_prompt ?? {};
-    const head = headHtml('characters', avatar, c.name, thumb(avatar), avatar, isMundiCard(c) ? '<span class="mu-tag">Mundi</span>' : '');
+    const head = headHtml('characters', avatar, c.name, thumb(avatar), avatar, madeForMundi(c) ? '<span class="mu-tag">Mundi</span>' : mundifiedOf(c) ? '<span class="mu-tag is-mfy">Mundified</span>' : '');
     const bar = actionBar({ dup: 'lib-dup', expr: true, del: 'lib-del-one' });
     if (c.shallow) return `${head}<p class="mu-muted">Loading the card…</p>`;
-    if (!L.edit) return `${head}${charToolsHtml(avatar)}${read('Description', c.description)}${read('Personality', c.personality)}${read('Scenario', c.scenario)}${greetingsHtml(c, avatar)}${charTagsHtml(avatar)}${charLoreHtml(avatar)}${bar}`;
+    if (!L.edit) return `${head}${charToolsHtml(avatar)}${mfyHtml(c, avatar)}${read('Description', c.description)}${read('Personality', c.personality)}${read('Scenario', c.scenario)}${greetingsHtml(c, avatar)}${charTagsHtml(avatar)}${charLoreHtml(avatar)}${bar}`;
     return `${head}<div class="mu-lib-form">${charTagsHtml(avatar)}${charLoreHtml(avatar)}
         ${field('Name', 'name', c.name)}
         ${field('Description', 'description', c.description, 'area', { rows: 9 })}
@@ -220,6 +234,29 @@ function charDetail(avatar: string) {
 }
 
 const EXP = { open: false };   // the export menu by the favorite star
+// Mundify: on a mundified copy, where it came from; on any other card (not made by Mundi), what a copy would lose and
+// the button to make one, with the copies already made.
+const STRIPPED: [string, (c: any) => any][] = [
+    ['scenario', c => c.scenario], ['greetings', c => c.first_mes || c.data?.alternate_greetings?.length], ['example dialogue', c => c.mes_example],
+    ['main prompt override', c => c.data?.system_prompt], ['post-history instructions', c => c.data?.post_history_instructions],
+    ["Character's note", c => c.data?.extensions?.depth_prompt?.prompt],
+];
+// A mundified copy (or a card Mundi wrote) made before cards had their own clothing and style: the button to add it.
+const styleBtn = (c: any) => hasStyle(c) ? '' : `<div class="mu-row">${btn('lib-style', 'sparkles', 'Add clothing and style')}</div>
+        <small class="mu-muted">This card has no clothing and style section yet. The AI writes one from the card (choosing what fits where the card says little), so their sprites and the story know how they dress.</small>`;
+function mfyHtml(c: any, avatar: string) {
+    const m = mundifiedOf(c);
+    if (m) {
+        const orig = charOf(m.from);
+        return `<section class="mu-lib-read mu-mfy">${styleBtn(c)}<small class="mu-muted">${icon('sparkles')} Mundified copy of ${orig ? btn('lib-mfy-go', 'user', esc(orig.name), 'mu-ghost', `data-id="${esc(m.from)}"`) : `<b data-notr>${esc(m.name)}</b> (the original was deleted)`}, ${m.ai ? 'cleaned up by the AI' : 'stripped without the AI'} on ${new Date(m.at).toLocaleDateString()}. It keeps only who they are; the world sets the scene and the first meeting.</small></section>`;
+    }
+    if (madeForMundi(c)) return hasStyle(c) ? '' : `<section class="mu-lib-read mu-mfy">${styleBtn(c)}</section>`;
+    const copies = mundiCopies(avatar);
+    const extra = STRIPPED.filter(([, f]) => String(f(c) || '').trim()).map(([k]) => k);
+    return `<section class="mu-lib-read mu-mfy"><div class="mu-row">${btn('lib-mfy', 'sparkles', copies.length ? 'Mundify again' : 'Mundify', copies.length ? '' : 'mu-primary')}
+            ${copies.map(x => btn('lib-mfy-go', 'sparkles', `Open the copy${copies.length > 1 ? ` (${new Date(mundifiedOf(x)!.at).toLocaleDateString()})` : ''}`, 'mu-ghost', `data-id="${esc(x.avatar)}"`)).join('')}</div>
+        <small class="mu-muted">${extra.length ? `This card has its own <span data-notr>${extra.join(', ')}</span>, which fight the world in Mundi. ` : ''}Mundify makes a copy for Mundi with only their appearance, clothing and style, backstory, personality and details. This card stays as it is.</small></section>`;
+}
 // Export, tokens, chats and the Mundi saves the character is in (30, 31, 33).
 const STATS: Record<string, { chats: number; msgs: number } | 'loading'> = {};
 function charToolsHtml(avatar: string) {
@@ -298,23 +335,27 @@ function outfitBar(avatar: string) {
     const list = outfitsOf(avatar) ?? []; const saved = savedOutfits(avatar);
     return `<div class="mu-outfits"><small class="mu-muted">Outfit</small><div class="mu-chips">
         <button class="mu-chip ${EO.outfit ? '' : 'is-on'}" data-act="lib-outfit" data-o="">Usual</button>
+        ${hasCgPage(avatar) ? `<button class="mu-chip ${EO.outfit === CG_FOLDER ? 'is-on' : ''}" data-act="lib-outfit" data-o="${CG_FOLDER}">CG</button>` : ''}
         ${list.map(o => `<span class="mu-chip-wrap"><button class="mu-chip ${EO.outfit.toLowerCase() === o.toLowerCase() ? 'is-on' : ''}" data-act="lib-outfit" data-o="${esc(o)}">${esc(outfitLabel(o))}</button>${saved.includes(o) ? `<button class="mu-ghost mu-ibtn" data-act="lib-outfit-del" data-o="${esc(o)}" title="Forget this outfit (the pictures stay)">${icon('x')}</button>` : ''}</span>`).join('')}</div>
         <div class="mu-lib-searchrow"><input type="text" placeholder="New outfit (a folder name, like pajamas)" value="${esc(EO.name)}" data-input="lib-outfit-name" data-focus="lib-outfit-name">${btn('lib-outfit-add', 'plus', 'Add')}</div>
         <small class="mu-muted">An outfit is a subfolder of their Expressions folder${EO.outfit ? ` (<span data-notr>${esc(baseSpriteFolder(avatar))}/${esc(EO.outfit)}</span>)` : ''}. Upload its pictures here; in the game, click their sprite to change clothes.</small></div>`;
 }
+// avatar: a character's card file, or "persona:<file>" (the persona's folder is its name)
 function exprHtml(avatar: string) {
-    const c = charOf(avatar);
-    const back = `<div class="mu-gal-albumhead">${btn('lib-expr-close', 'back', 'Back to the card', 'mu-ghost')}<div><h3>Expressions</h3><small data-notr>${esc(c?.name ?? avatar)}</small></div></div>`;
+    const name = avatar.startsWith('persona:') ? baseSpriteFolder(avatar) : charOf(avatar)?.name ?? avatar;
+    const back = `<div class="mu-gal-albumhead">${btn('lib-expr-close', 'back', avatar.startsWith('persona:') ? 'Back to the persona' : 'Back to the card', 'mu-ghost')}<div><h3>Expressions</h3><small data-notr>${esc(name)}</small></div></div>`;
+    const look = spriteLookHtml(avatar, EO.outfit);
     if (L.sprites === null) {
         const want = EO.outfit;
         fetchSprites(avatar, want).then(list => { if (L.expr === avatar && EO.outfit === want) { L.sprites = list; notify(); } });
-        return `${back}${outfitBar(avatar)}<p class="mu-muted">Loading the pictures…</p>`;
+        return `${back}${outfitBar(avatar)}${look}<p class="mu-muted">Loading the pictures…</p>`;
     }
     const byLabel = new Map<string, any[]>();
     for (const s of L.sprites) { const k = String(s.label); if (!byLabel.has(k)) byLabel.set(k, []); byLabel.get(k)!.push(s); }
-    const labels = [...new Set([...expressionLabels(), ...byLabel.keys()])];
+    const cg = EO.outfit === CG_FOLDER;
+    const labels = [...new Set([...(cg ? cgPositions() : expressionLabels()), ...byLabel.keys()])];
     const done = labels.filter(l => byLabel.has(l)).length;
-    return `${back}${outfitBar(avatar)}<p class="mu-muted">${done} / ${labels.length} expressions have a picture. The character shows the picture of the emotion of each line; “neutral” is used when there is none.</p>
+    return `${back}${outfitBar(avatar)}${look}<p class="mu-muted">${cg ? `${done} / ${labels.length} CG pictures drawn.` : `${done} / ${labels.length} expressions have a picture. The character shows the picture of the emotion of each line; “neutral” is used when there is none.`}</p>
         <div class="mu-expr-grid">${labels.map(l => {
             const files = byLabel.get(l) ?? [];
             const f = files[0];
@@ -323,7 +364,7 @@ function exprHtml(avatar: string) {
                 <div class="mu-expr-img">${f ? `<img src="${esc(f.path)}" alt="" loading="lazy">` : icon('image')}</div>
                 <b data-notr>${esc(l)}</b>${files.length > 1 ? `<small>${files.length}</small>` : ''}
                 <div class="mu-row">${ibtn('lib-expr-up', 'upload', f ? 'Replace' : 'Upload', '', `data-l="${esc(l)}" data-s="${esc(sprite)}"`)}
-                    ${f ? ibtn('lib-expr-del', 'trash', 'Delete', 'mu-danger', `data-l="${esc(l)}" data-s="${esc(sprite)}"`) : ''}</div>
+                    ${f ? ibtn('lib-expr-del', 'trash', 'Delete', 'mu-danger', `data-l="${esc(l)}" data-s="${esc(sprite)}"`) : ''}${spriteTileButton(avatar, l, EO.outfit)}</div>
             </div>`;
         }).join('')}</div>
         <p class="mu-muted">Which emotion each line has is decided by the Character Expressions extension (in Settings › Extensions).</p>`;
@@ -354,11 +395,11 @@ function personaDetail(file: string) {
     const head = headHtml('personas', file, p.name, personaThumb(file), file, `${file === persona() ? '<span class="mu-tag">In use</span>' : ''}${isDef ? '<span class="mu-tag is-gold">Default</span>' : ''}`, crown);
     const sheet = personaSheet(file);
     const w = sheet ? getWorld(sheet.world) : null;
-    const bar = actionBar({ dup: 'lib-dup', del: 'lib-del-one' });
+    const bar = actionBar({ dup: 'lib-dup', expr: true, del: 'lib-del-one' });
     const sheetRead = sheet && w?.sheet.traits ? `<section class="mu-lib-read"><h4>Character sheet</h4><div class="mu-chips">${w.sheet.traits.flatMap(t => (sheet.traits?.[t.id] ?? []).map((x: string) => `<span class="mu-chip"><small>${esc(t.label)}</small> ${esc(x)}</span>`)).join('') || '<span class="mu-muted">—</span>'}</div></section>` : '';
     // the character sheet only exists to write a new character quickly (new game): the Library shows the persona itself
     void sheetRead;
-    if (!L.edit) return `${head}${p.title ? read('Title', p.title, false) : ''}${personaLore(file) ? `<section class="mu-lib-read"><h4>Lorebook</h4><span class="mu-chip is-on" data-notr>${esc(personaLore(file))}</span></section>` : ''}${read('Description', p.description)}${bar}`;
+    if (!L.edit) return `${head}${personaMfyHtml(file)}${p.title ? read('Title', p.title, false) : ''}${personaLore(file) ? `<section class="mu-lib-read"><h4>Lorebook</h4><span class="mu-chip is-on" data-notr>${esc(personaLore(file))}</span></section>` : ''}${read('Description', p.description)}${bar}`;
     const pos = POSITIONS.some(o => o[0] === p.position) ? POSITIONS : [...POSITIONS, [p.position, `#${p.position}`] as Opt];
 
     return `${head}<div class="mu-lib-form">
@@ -371,6 +412,28 @@ function personaDetail(file: string) {
             ${field('Where the description goes', 'position', p.position, 'select', { options: pos })}
             <div class="mu-lib-grid">${field('Depth', 'depth', p.depth, 'num', { min: 0, max: 999 })}${field('Role', 'role', p.role, 'select', { options: ROLES })}</div>` : ''}
         ${bar}</div>`;
+}
+// Mundify for a persona: a copy of it (and of its lorebook) made for Mundi's worlds; a copy says what it was made from.
+function personaMfyHtml(file: string) {
+    const m = personaMundifiedOf(file);
+    if (m) {
+        const orig = personas().some(x => x.file === m.from);
+        return `<section class="mu-lib-read mu-mfy"><small class="mu-muted">${icon('sparkles')} Mundified copy of ${orig ? btn('lib-mfy-go', 'user', esc(m.name), 'mu-ghost', `data-id="${esc(m.from)}"`) : `<b data-notr>${esc(m.name)}</b> (the original was deleted)`}, ${m.ai ? 'cleaned up by the AI' : 'copied without the AI'} on ${new Date(m.at).toLocaleDateString()}${m.lore ? `, with the lorebook ${btn('lib-mfy-lore-go', 'book', esc(m.lore), 'mu-ghost', `data-id="${esc(m.lore)}"`)}` : ''}. It keeps only who you are; the world sets the scene. In a new game, “Fill from my persona” reads it.</small></section>`;
+    }
+    const copies = personaCopies(file);
+    return `<section class="mu-lib-read mu-mfy"><div class="mu-row">${btn('lib-pmfy', 'sparkles', copies.length ? 'Mundify again' : 'Mundify', copies.length ? '' : 'mu-primary')}
+            ${copies.map(x => btn('lib-mfy-go', 'sparkles', `Open the copy${copies.length > 1 ? ` (${new Date(personaMundifiedOf(x)!.at).toLocaleDateString()})` : ''}`, 'mu-ghost', `data-id="${esc(x)}"`)).join('')}</div>
+        <small class="mu-muted">Mundify makes a copy of this persona for Mundi with only your appearance, clothing and style, backstory, personality and details${personaLore(file) ? ', and a copy of its lorebook with the facts about you and without the instructions to the AI' : ''}. This persona stays as it is.</small></section>`;
+}
+async function doMundifyPersona() {
+    const m = state.modal; if (m?.type !== 'lib-dlg-pmfy') return;
+    const file: string = m.id, ai = !!m.ai, lore = m.lore !== false;
+    state.modal = null;
+    try {
+        const r = await busy(`Mundifying ${nameOfId('personas', file)}`, () => mundifyPersona(file, ai, lore, (what) => { state.busy = what; notify(); }));
+        toast(`Mundified copy made${r.lore ? ` with the lorebook “${r.lore}”` : ''}. The original is unchanged.`, 'success');
+        await select(r.file);
+    } catch (e: any) { toast(String(e?.message ?? e), 'error'); notify(); }
 }
 async function savePersonaDraft(file: string) {
     const out: any = {};
@@ -431,8 +494,9 @@ function entryForm(e: any) {
 
 function loreDetail(name: string) {
     const bound = chatLore() === name;
-    const head = `${headHtml('lorebooks', name, name, '', '', bound ? '<span class="mu-tag">This save\'s lorebook</span>' : '')}
-        ${actionBar({ save: false, dup: 'lib-dup', del: 'lib-del-one' }).replace('<div class="mu-lib-savebar">', `<div class="mu-lib-savebar is-top">${L.edit ? btn('lib-new-entry', 'plus', 'New entry') : ''}`)}`;
+    const head = `${headHtml('lorebooks', name, name, '', '', bound ? '<span class="mu-tag">This save\'s lorebook</span>' : loreMundifiedOf(name) ? '<span class="mu-tag is-mfy">Mundified</span>' : '')}
+        ${actionBar({ save: false, dup: 'lib-dup', del: 'lib-del-one' }).replace('<div class="mu-lib-savebar">', `<div class="mu-lib-savebar is-top">${L.edit ? btn('lib-new-entry', 'plus', 'New entry') : ''}`)}
+        ${L.edit ? '' : mfyLoreHtml(name)}`;
     if (!L.lore || L.lore.name !== name) return `${head}<p class="mu-muted">Loading the lorebook…</p>`;
     const list = entries();
     if (!list.length) return `${head}<p class="mu-muted">This lorebook is empty.</p>`;
@@ -444,6 +508,20 @@ function loreDetail(name: string) {
             ${open ? (L.edit ? entryForm(e) : `<div class="mu-entry-body" data-notr>${esc(e.content ?? '')}</div>`) : ''}
         </li>`;
     }).join('')}</ul>`;
+}
+
+// Mundify for a lorebook: on a mundified copy, where it came from and what changed; on any other lorebook, the button
+// to make one, with the copies already made.
+function mfyLoreHtml(name: string) {
+    const m = loreMundifiedOf(name);
+    if (m) {
+        const orig = lorebooks().includes(m.from);
+        return `<section class="mu-lib-read mu-mfy"><small class="mu-muted">${icon('sparkles')} Mundified copy of ${orig ? btn('lib-mfy-go', 'book', esc(m.from), 'mu-ghost', `data-id="${esc(m.from)}"`) : `<b data-notr>${esc(m.from)}</b> (the original was deleted)`}, ${m.ai ? 'sorted by the AI' : 'sorted without the AI'} on ${new Date(m.at).toLocaleDateString()}: ${m.off} entr${m.off === 1 ? 'y' : 'ies'} switched off${m.rewritten ? `, ${m.rewritten} rewritten with the facts only` : ''}. Switched-off entries are greyed out below: switch one back on in its form if it should stay.</small></section>`;
+    }
+    const copies = loreCopies(name);
+    return `<section class="mu-lib-read mu-mfy"><div class="mu-row">${btn('lib-mfylore', 'sparkles', copies.length ? 'Mundify again' : 'Mundify', copies.length ? '' : 'mu-primary')}
+            ${copies.map((x, i) => btn('lib-mfy-go', 'sparkles', `Open the copy${copies.length > 1 ? ` (${new Date(loreMundifiedOf(x)!.at).toLocaleDateString()})` : ''}`, i ? 'mu-ghost' : '', `data-id="${esc(x)}"`)).join('')}</div>
+        <small class="mu-muted">Mundify makes a copy for Mundi worlds with only the facts about the world. Entries that tell the AI how to reply, set up the opening scene or say who {{user}} is are switched off, because the world does that. This lorebook stays as it is.</small></section>`;
 }
 
 async function saveEntry() {
@@ -471,7 +549,7 @@ function saveTab() {
     const g = game();
     if (!g) return '<p class="mu-muted">No save is open. Load a save to see its notes.</p>';
     const m = ctx().chatMetadata ?? {};
-    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(gameEntry(selectedGroup())?.title ?? '')}</small></div></header>`;
+    const head = `<header class="mu-lib-head"><div><h2>This save</h2><small data-notr>${esc(currentEntry()?.title ?? '')}</small></div></header>`;
     if (!L.edit) return `${head}${read('Author\'s Note', m.note_prompt)}${read('Lorebook', chatLore(), false)}`;
     return `${head}<div class="mu-lib-form">
         ${field('Author\'s Note', 'note_prompt', m.note_prompt ?? '', 'area', { rows: 6, hint: 'A standing instruction for this save only: tone, pacing, what to focus on.' })}
@@ -528,7 +606,7 @@ function pickFiles(accept: string): Promise<File[]> {
 interface Row extends Item { folder?: boolean; count?: number }
 function rows(tab: ListTab): Row[] {
     const list = items(tab);
-    if (L.q || L.favOnly) return list;   // searching shows everything, without folders
+    if (L.q || L.favOnly || NS.on || MF.on) return list;   // searching (and the filters) show everything, without folders
     if (L.folder) return list.filter(i => F.of(tab, i.id).includes(L.folder!));
     const fs = F.list(tab); const ids = new Set(fs.map(f => f.id));
     const out: Row[] = sortFolders(tab, fs.map(f => ({ id: f.id, name: f.name, img: '', fav: false, folder: true, count: list.filter(i => F.of(tab, i.id).includes(f.id)).length })));
@@ -560,10 +638,24 @@ function rowHtml(r: Row) {
     const picked = L.picked.includes(r.id);
     const box = L.picking || L.picked.length ? `<em class="mu-pick">${picked ? icon('check') : ''}</em>` : '';
     const pic = r.img ? `<img src="${esc(r.img)}" alt="" loading="lazy" draggable="false">` : `<i class="mu-lib-thumb">${icon('book')}</i>`;
-    const badges = `${r.crown ? `<b class="mu-crownmark" title="Default persona">${icon('crownFill')}</b>` : ''}${r.fav ? `<b class="mu-fav">${icon('starFill')}</b>` : ''}`;
+    const badges = `${r.mfy ? `<b class="mu-mfymark" title="Mundified copy">${icon('sparkles')}</b>` : ''}${r.crown ? `<b class="mu-crownmark" title="Default persona">${icon('crownFill')}</b>` : ''}${r.fav ? `<b class="mu-fav">${icon('starFill')}</b>` : ''}`;
     const n = L.tab === 'lorebooks' && !grid() ? loreCount(r.id, notify) : undefined;
     const count = L.tab === 'lorebooks' && !grid() ? `<small class="mu-lib-count" title="Entries">${n ?? '…'}</small>` : '';
     return `<button class="mu-lib-item ${L.sel === r.id && !L.picked.length ? 'is-on' : ''} ${picked ? 'is-picked' : ''}" data-act="lib-sel" data-id="${esc(r.id)}" draggable="true" title="${esc(r.name)}">${box}${pic}<span data-notr>${esc(r.name)}</span>${badges}${count}</button>`;
+}
+
+const needsStyle = (a: string) => { const c = charOf(a); return !!c && (!!mundifiedOf(c) || madeForMundi(c)) && !hasStyle(c); };
+// Adds the clothing and style section to each card, one by one; a card that fails is said and the others go on.
+async function doStyle(ids: string[]) {
+    let done = 0; const failed: string[] = [];
+    for (const [k, id] of ids.entries()) {
+        const name = nameOfId('characters', id);
+        try { await busy(ids.length > 1 ? `Writing ${name}'s clothing and style (${k + 1} of ${ids.length})` : `Writing ${name}'s clothing and style`, () => addStyle(id)); done++; }
+        catch (e: any) { failed.push(`${name}: ${String(e?.message ?? e)}`); }
+    }
+    if (failed.length) toast(failed.join('\n'), 'error');
+    if (done) toast(done === 1 ? 'Clothing and style added to the card.' : `Clothing and style added to ${done} cards.`, 'success');
+    L.draft = {}; notify();
 }
 
 function bulkBar(tab: ListTab) {
@@ -575,6 +667,8 @@ function bulkBar(tab: ListTab) {
         <div class="mu-lib-bulkbtns">
             ${tab === 'backgrounds' ? '' : btn('lib-bulk-fav', allFav ? 'star' : 'starFill', allFav ? 'Unfavorite' : 'Favorite', '', dis)}
             ${btn('lib-bulk-folder', 'move', 'Move', '', dis)}
+            ${tab === 'characters' ? btn('lib-bulk-mfy', 'sparkles', 'Mundify', '', dis) : ''}
+            ${tab === 'characters' && L.picked.some(needsStyle) ? btn('lib-bulk-style', 'sparkles', 'Add clothing and style', '', dis) : ''}
             ${tab === 'characters' || tab === 'lorebooks' ? btn('lib-bulk-zip', 'download', 'Zip', '', dis) : ''}
             ${btn('lib-bulk-del', 'trash', 'Delete', 'mu-danger', dis)}
             ${ibtn('lib-pick-clear', 'x', 'Cancel selection')}</div></div>`;
@@ -583,7 +677,7 @@ function bulkBar(tab: ListTab) {
 const CREATE: Record<ListTab, string> = { characters: 'New character', personas: 'New persona', lorebooks: 'New lorebook', backgrounds: 'Upload pictures' };
 function listPane(tab: ListTab) {
     const list = rows(tab);
-    const folder = L.folder && !L.q && !L.favOnly ? F.list(tab).find(f => f.id === L.folder) : null;
+    const folder = L.folder && !L.q && !L.favOnly && !NS.on && !MF.on ? F.list(tab).find(f => f.id === L.folder) : null;
     return `<aside class="mu-lib-list mu-panel ${grid() ? 'is-grid' : ''} ${tab === 'backgrounds' ? 'is-bgs' : ''}">
         <div class="mu-lib-filter">
             <div class="mu-lib-tools">
@@ -593,9 +687,12 @@ function listPane(tab: ListTab) {
                 ${ibtn('lib-picking', 'select', 'Select several (or Ctrl+click, Shift+click)', L.picking ? 'is-on' : '')}
                 ${ibtn('lib-search', 'search', 'Search', L.searching || L.q ? 'is-on' : '')}
                 ${tab === 'backgrounds' ? '' : ibtn('lib-favonly', L.favOnly ? 'starFill' : 'star', 'Only favorites', `mu-favbtn ${L.favOnly ? 'is-on' : ''}`)}
+                ${tab === 'characters' || tab === 'lorebooks' ? ibtn('lib-mfyonly', 'sparkles', 'Only mundified copies', `mu-mfybtn ${MF.on ? 'is-on' : ''}`) : ''}
+                ${tab === 'characters' || tab === 'personas' ? ibtn('lib-nospr', 'image', 'Only those with no sprites', NS.on ? 'is-on' : '') : ''}
                 ${sortBtn(tab)}${tab === 'backgrounds' ? '' : ibtn('lib-view', grid() ? 'list' : 'grid', grid() ? 'Show as a list' : 'Show as a grid')}
             </div>
             ${L.searching || L.q ? `<input type="search" placeholder="Search" value="${esc(L.q)}" data-input="lib-q" data-focus="lib-q">` : ''}
+            ${NS.on && (tab === 'characters' || tab === 'personas') ? `<div class="mu-lib-nospr"><small class="mu-muted">${list.length ? `${list.length} with no sprites` : 'Everyone here has sprites (still looking at some).'}</small>${list.length ? btn('lib-nospr-draw', 'image', `Draw sprites for ${list.length === 1 ? 'this one' : `these ${list.length}`}`, 'mu-primary') : ''}</div>` : ''}
             ${folder ? `<div class="mu-lib-crumb">${btn('lib-folder-up', 'back', 'Folders', 'mu-ghost', 'data-drop=""')}<b data-notr>${icon('folder')} ${esc(folder.name)}</b>
                 ${tab === 'backgrounds' ? '' : `<input type="color" title="Folder color" value="${esc((tab === 'characters' ? folderColor(folder.id) : (folder as any).color) || '#4fb0ff')}" data-input="lib-folder-color">${tab === 'characters' || tab === 'lorebooks' ? ibtn('lib-folder-zip', 'download', 'Export this folder as a zip', 'mu-ghost') : ''}${ibtn('lib-folder-ren', 'edit', 'Rename this folder', 'mu-ghost')}${ibtn('lib-folder-del', 'trash', 'Delete this folder (what is inside stays)', 'mu-ghost')}`}</div>` : ''}
         </div>
@@ -664,6 +761,28 @@ function dialogHtml() {
             <div class="mu-lib-searchrow"><input type="text" placeholder="New folder name" value="${esc(m.name ?? '')}" data-input="lib-dlg-name" data-focus="lib-dlg-name">${btn('lib-folder-new', 'folderPlus', 'Create')}</div>
             ${tab === 'characters' ? '<p class="mu-muted">Folders are SillyTavern\'s folder tags, so they also show in its character list.</p>' : ''}
             <div class="mu-row mu-dlg-btns"><button class="mu-primary" data-act="lib-dlg-close">Done</button></div>`;
+    } else if (m.type === 'lib-dlg-mfy') {
+        const ids: string[] = m.ids;
+        body = `<h3>${ids.length === 1 ? `Mundify “${esc(nameOfId('characters', ids[0]))}”?` : `Mundify ${ids.length} characters?`}</h3>
+            ${ids.length > 1 ? `<p class="mu-muted mu-dlg-names" data-notr>${esc(ids.map(i => nameOfId('characters', i)).join(', '))}</p>` : ''}
+            <p>Mundi makes a copy of ${ids.length === 1 ? 'the card' : 'each card'} for its worlds. The original is not changed.</p>
+            <p class="mu-muted"><b>Kept:</b> appearance, backstory, personality and other details about the character.<br><b>Removed:</b> scenario, greetings, example dialogue, main prompt override, post-history instructions and Character's note. The world handles all of these. Linked lorebooks stay linked.</p>
+            <label class="mu-check"><input type="checkbox" data-input="lib-mfy-ai" ${m.ai ? 'checked' : ''}><span>Clean up with the AI<small>The AI sorts the card into appearance, clothing and style (chosen to fit them where the card says little), backstory, personality and details, and saves facts about the character hidden in the scenario, greetings or notes. Without it, the description and personality are copied word for word.</small></span></label>
+            <div class="mu-row mu-dlg-btns"><button data-act="lib-dlg-close">Cancel</button>${btn('lib-mfy-yes', 'sparkles', 'Mundify', 'mu-primary')}</div>`;
+    } else if (m.type === 'lib-dlg-mfylore') {
+        body = `<h3>Mundify “${esc(m.id)}”?</h3>
+            <p>Mundi makes a copy of the lorebook for its worlds. The original is not changed.</p>
+            <p class="mu-muted"><b>Kept:</b> everything about the world: places, people, groups, history, technology, magic, creatures, customs.<br><b>Switched off:</b> instructions to the AI (how to reply, style, format, narrator rules, trackers), the opening scene, and who {{user}} is. The world handles all of these. Switched-off entries stay in the copy, so you can switch one back on.</p>
+            <label class="mu-check"><input type="checkbox" data-input="lib-mfy-ai" ${m.ai ? 'checked' : ''}><span>Sort with the AI<small>The AI reads every entry (a few at a time), and rewrites entries that mix facts and instructions so only the facts stay. Without it, only entries that plainly are instructions are switched off.</small></span></label>
+            <div class="mu-row mu-dlg-btns"><button data-act="lib-dlg-close">Cancel</button>${btn('lib-mfylore-yes', 'sparkles', 'Mundify', 'mu-primary')}</div>`;
+    } else if (m.type === 'lib-dlg-pmfy') {
+        const book = personaLore(m.id);
+        body = `<h3>Mundify “${esc(nameOfId('personas', m.id))}”?</h3>
+            <p>Mundi makes a copy of the persona for its worlds, with the same name and picture. The original is not changed.</p>
+            <p class="mu-muted"><b>Kept:</b> appearance, clothing and style, backstory, personality and other details about you.<br><b>Removed:</b> the chat's setup, instructions to the AI and roleplay rules. The world handles these.</p>
+            ${book ? `<label class="mu-check"><input type="checkbox" data-input="lib-pmfy-lore" ${m.lore !== false ? 'checked' : ''}><span>Mundify its lorebook too (<span data-notr>${esc(book)}</span>)<small>${loreMundifiedOf(book) ? 'It is a mundified copy already: the new persona uses it as it is.' : 'A copy that keeps every fact about you (your powers and how they work, limits, belongings, the people you know) and switches off the instructions to the AI (status panels, trackers, writing rules). The copy becomes the new persona\'s lorebook.'}</small></span></label>` : ''}
+            <label class="mu-check"><input type="checkbox" data-input="lib-mfy-ai" ${m.ai ? 'checked' : ''}><span>Clean up with the AI<small>The AI sorts the description into appearance, clothing and style, backstory, personality and details${book ? ', and sorts the lorebook\'s entries' : ''}. Without it, the description is copied word for word${book ? ' and only lorebook entries that plainly are instructions are switched off' : ''}.</small></span></label>
+            <div class="mu-row mu-dlg-btns"><button data-act="lib-dlg-close">Cancel</button>${btn('lib-pmfy-yes', 'sparkles', 'Mundify', 'mu-primary')}</div>`;
     } else if (m.type === 'lib-dlg-newfolder') {
         body = `<h3>New folder</h3><input type="text" placeholder="New folder name" value="${esc(m.name ?? '')}" data-input="lib-dlg-name" data-focus="lib-dlg-name">
             ${L.picked.length ? `<p class="mu-muted">${L.picked.length} selected items go into it.</p>` : ''}
@@ -693,7 +812,7 @@ const NOTES: Record<string, string> = {
 function detailPane(tab: ListTab) {
     let body: string;
     if (!L.sel) body = `<p class="mu-muted mu-pad">${tab === 'characters' ? 'Choose a character.' : tab === 'personas' ? 'Choose a persona.' : tab === 'backgrounds' ? 'Choose a picture. Pictures here are SillyTavern\'s backgrounds; Mundi uses them for its scenes.' : 'Choose a lorebook.'}</p>`;
-    else if (tab === 'characters' && L.expr === L.sel) body = exprHtml(L.sel);
+    else if ((tab === 'characters' || tab === 'personas') && L.expr === sprKey(tab, L.sel)) body = exprHtml(L.expr);
     else body = tab === 'characters' ? charDetail(L.sel) : tab === 'personas' ? personaDetail(L.sel) : tab === 'backgrounds' ? bgDetail(L.sel) : loreDetail(L.sel);
     return `<section class="mu-lib-detail mu-panel" data-keep="lib-detail">${L.sel ? `${btn('lib-unsel', 'back', 'List', 'mu-ghost mu-lib-back')}` : ''}${body}</section>`;
 }
@@ -748,6 +867,14 @@ export function openLibrary(tab?: string) {
     state.view = 'library'; L.draft = {}; state.modal = null; L.picked = []; L.picking = false; L.expr = null;
     if (L.tab === 'lorebooks' && L.sel && L.lore?.name !== L.sel) select(L.sel);
     notify();
+}
+// A character's (or "persona:<file>") Expressions page, from the game or Settings; Back returns there.
+export function openExpressions(key: string) {
+    const from = state.view, isP = key.startsWith('persona:');
+    openLibrary(isP ? 'personas' : 'characters');
+    if (from !== 'library') backTo = from;
+    EO.outfit = '';
+    void select(isP ? key.slice(8) : key).then(() => { L.expr = key; L.sprites = null; notify(); });
 }
 export function libraryEscape(): boolean {
     if (!L.picked.length && !L.picking) return false;
@@ -844,6 +971,33 @@ async function renameBg(file: string) {
     L.sel = next;
 }
 
+// Mundifies the cards of the dialog one by one; a card that fails is said and the others go on.
+async function doMundify() {
+    const m = state.modal; if (m?.type !== 'lib-dlg-mfy') return;
+    const ids: string[] = m.ids; const ai = !!m.ai;
+    state.modal = null;
+    const made: string[] = [], failed: string[] = [];
+    for (const [k, id] of ids.entries()) {
+        const name = nameOfId('characters', id);
+        try { made.push(await busy(ids.length > 1 ? `Mundifying ${name} (${k + 1} of ${ids.length})` : `Mundifying ${name}`, () => mundify(id, ai))); }
+        catch (e: any) { failed.push(`${name}: ${String(e?.message ?? e)}`); }
+    }
+    if (failed.length) toast(failed.join('\n'), 'error');
+    if (made.length) toast(made.length === 1 ? 'Mundified copy made. The original is unchanged.' : `${made.length} mundified copies made. The originals are unchanged.`, 'success');
+    if (made.length) { clearPicks(); await select(made[0]); } else notify();
+}
+
+async function doMundifyLore() {
+    const m = state.modal; if (m?.type !== 'lib-dlg-mfylore') return;
+    const name: string = m.id, ai = !!m.ai;
+    state.modal = null;
+    try {
+        const r = await busy(`Mundifying ${name}`, () => mundifyLore(name, ai, (i, n) => { if (n > 1) { state.busy = `Mundifying ${name}: part ${i + 1} of ${n}`; notify(); } }));
+        toast(`Mundified copy made: ${r.off} entr${r.off === 1 ? 'y' : 'ies'} switched off${r.rewritten ? `, ${r.rewritten} rewritten` : ''}, ${r.kept} kept as they were. The original is unchanged.`, 'success');
+        await select(r.name);
+    } catch (e: any) { toast(String(e?.message ?? e), 'error'); notify(); }
+}
+
 async function doDuplicate() {
     const tab = listTab(); const id = L.sel;
     if (!tab || !id || !guard()) return;
@@ -854,7 +1008,7 @@ async function doDuplicate() {
 
 Object.assign(ACT, {
     'lib-clore-del': async (el) => { const a = L.sel; if (!a) return; try { await setCharLorebooks(a, charLorebooks(a).filter(n => n !== el.dataset.name)); } catch (e: any) { toast(String(e?.message ?? e), 'error'); } notify(); },
-    'lib-back': () => { if (!guard()) return; state.view = (backTo === 'worldcfg' && game() ? 'worldcfg' : 'menu') as any; clearPicks(); notify(); },
+    'lib-back': () => { if (!guard()) return; state.view = (backTo === 'worldcfg' ? (game() ? 'worldcfg' : 'menu') : ['scene', 'map', 'chat', 'settings'].includes(backTo) && (backTo === 'settings' || game()) ? backTo : 'menu') as any; backTo = 'menu'; clearPicks(); notify(); },
     'lib-tab': (el) => { if (!guard()) return; if (el.dataset.tab === 'backgrounds') L.bgs = null; L.tab = el.dataset.tab!; L.sel = null; L.entry = null; L.expr = null; L.q = ''; L.searching = false; L.folder = null; state.modal = null; clearPicks(); notify(); },
     'lib-sel': (el, e) => clickItem(el.dataset.id!, e as MouseEvent),
     'lib-unsel': () => { if (!guard()) return; L.sel = null; L.expr = null; notify(); },
@@ -955,7 +1109,30 @@ Object.assign(ACT, {
     },
     'lib-crown': () => { const id = L.sel; if (!id) return; setDefaultPersona(defaultPersona() === id ? null : id); notify(); },
     // expressions
-    'lib-expr': () => { if (!guard() || !L.sel) return; L.expr = L.sel; L.sprites = null; notify(); },
+    'lib-expr': () => { if (!guard() || !L.sel || !listTab()) return; L.expr = sprKey(listTab()!, L.sel); L.sprites = null; notify(); },
+    'lib-nospr': () => { NS.on = !NS.on; notify(); },
+    'lib-mfyonly': () => { MF.on = !MF.on; notify(); },
+    'lib-mfy': () => { if (L.sel && guard()) { state.modal = { type: 'lib-dlg-mfy', ids: [L.sel], ai: true }; notify(); } },
+    'lib-bulk-mfy': () => {
+        const ids = L.picked.filter(a => { const c = charOf(a); return c && !madeForMundi(c) && !mundifiedOf(c); });
+        if (!ids.length) { toast('These are made for Mundi already.', 'info'); return; }
+        state.modal = { type: 'lib-dlg-mfy', ids, ai: true }; notify();
+    },
+    'lib-style': () => { if (L.sel && guard()) void doStyle([L.sel]); },
+    'lib-bulk-style': () => { const ids = L.picked.filter(needsStyle); if (ids.length && guard()) void doStyle(ids); },
+    'lib-mfy-go': (el) => { if (guard()) void select(el.dataset.id!); },
+    'lib-mfy-yes': () => void doMundify(),
+    'lib-mfylore': () => { if (L.sel && guard()) { state.modal = { type: 'lib-dlg-mfylore', id: L.sel, ai: true }; notify(); } },
+    'lib-mfylore-yes': () => void doMundifyLore(),
+    'lib-pmfy': () => { if (L.sel && guard()) { state.modal = { type: 'lib-dlg-pmfy', id: L.sel, ai: true, lore: true }; notify(); } },
+    'lib-pmfy-yes': () => void doMundifyPersona(),
+    'lib-mfy-lore-go': (el) => { if (guard()) { L.tab = 'lorebooks'; void select(el.dataset.id!); } },
+    'lib-nospr-draw': () => {
+        const tab = listTab(); if (!tab) return;
+        const n = drawEveryone(items(tab).map(i => sprKey(tab, i.id)));
+        toast(n ? `Drawing ${n === 1 ? '1 person' : `${n} people`} on ComfyUI: everyone's neutral sprite first, then the rest.` : 'They are all being drawn already.', 'info');
+        notify();
+    },
     'lib-expr-close': () => { L.expr = null; EO.outfit = ''; notify(); },
     'lib-outfit': (el) => { EO.outfit = el.dataset.o ?? ''; L.sprites = null; notify(); },
     'lib-outfit-add': () => { const id = L.expr; if (!id) return; const n = addOutfit(id, EO.name); if (!n) { toast('Write the folder name.', 'info'); return; } EO.name = ''; EO.outfit = n; L.sprites = null; notify(); },
@@ -1051,6 +1228,8 @@ Object.assign(INPUT, {
     'lib-dlg-name': (el) => { if (state.modal) state.modal.name = el.value; },
     'lib-outfit-name': (el) => { EO.name = el.value; },
     'lib-tag-text': (el) => { TG.text = el.value; },
+    'lib-mfy-ai': (el) => { if (state.modal?.type === 'lib-dlg-mfy' || state.modal?.type === 'lib-dlg-mfylore' || state.modal?.type === 'lib-dlg-pmfy') state.modal.ai = (el as HTMLInputElement).checked; },
+    'lib-pmfy-lore': (el) => { if (state.modal?.type === 'lib-dlg-pmfy') state.modal.lore = (el as HTMLInputElement).checked; },
     'lib-dlg-desc': (el) => { if (state.modal) state.modal.desc = el.value; },
     'lib-alt': (el) => {
         const c = L.sel ? charOf(L.sel) : null; if (!c) return;
